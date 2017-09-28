@@ -26,6 +26,7 @@ print('Done importing everything.  System ready to rip!')
 
 
 #### Next cell ####
+# Initial importing of data.
 
 def process_base_image_dir(basedir):
     # Different folders are different sources for images, GTI, KITTI, etc
@@ -56,6 +57,9 @@ basedir = './data/non-vehicles'
 image_types = os.listdir(basedir)
 notcars = process_image_types(image_types, 'notcars.txt', 'Non-Vehicle')
 
+del basedir, image_types
+print('Printed above size of test sets, also imported cars and notcars')
+
 #### Next Cell ###
 # Utility Function
 
@@ -77,6 +81,7 @@ def correct_for_colorspace_or_copy(image, color_space):
 
     return feature_image
 
+print('Loaded all utility functions')
 
 #### Next cell ####
 # Feature-specific functions
@@ -122,7 +127,6 @@ def color_hist(img, nbins=32): #, bins_range=(0, 256)):
 
     return hist_features
     #return channel_1_hist, channel_2_hist, channel_3_hist, bin_centers, hist_features
-
 
 # Define a function to extract features from a list of images
 # Have this function call bin_spatial() and color_hist()
@@ -186,30 +190,29 @@ def extract_features(
         features.append(np.concatenate(file_features))
 
     return features
+print('Loaded Feature Extract Helper Functions!')
 
 
 #### Next cell ####
 # Testing stuff out
 
-if platform != 'darwin':  # Mac OSX
-    print('Only meant for running from command line!')
-    #return
-else:
-    test_images = glob.glob("./test_images/*.png")
+OUTPUT_DIR = './output_images/{}'
+def run_feature_test(test_images, output_file_name='test_feature.png'):
 
+    print('Testing out by picking randomly from {} images'.format(len(test_images)))
     features = extract_features(
         test_images,
         color_space='RGB',
         spatial_size=(32, 32),
         hist_bins=32
-        #, hist_range=(0, 256)
+        # , hist_range=(0, 256)
     )
 
     if len(features) == 0:
         print('Your function only returns empty feature vectors...')
     else:
         # Create an array stack of feature vectors
-        X = np.vstack(features).astype(np.float64) #, notcar_features
+        X = np.vstack(features).astype(np.float64)  # , notcar_features
         # Fit a per-column scaler
         X_scaler = StandardScaler().fit(X)
         # Apply the scaler to X
@@ -228,7 +231,22 @@ else:
         plt.title('Normalized Features')
         fig.tight_layout()
 
-        plt.savefig('./output_images/test_feature.png')
-        #plt.show()
+        if platform == 'darwin':
+            print('Presuming to be on a mac, saving to file')
+            plt.savefig(OUTPUT_DIR.format(output_file_name))
+        else:
+            print('Presuming to be in Jupyter Notebook, calling show()')
+            plt.show()
+
+
+if platform != 'darwin':  # Mac OSX
+    print('Only meant for running from command line!  Or maybe not?')  #TODO: Verify from Jupyter if needed, think it will work...
+else:
+    test_images = glob.glob('./test_images/*.png')
+    run_feature_test(test_images, 'test.png')
+
+    del test_images
+
+print("All done testing!  How's it lookin'!?")
 
 #### Next cell ###
