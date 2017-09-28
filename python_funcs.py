@@ -17,9 +17,8 @@ from moviepy.editor import VideoFileClip
 import numpy as np
 from sys import platform
 
-
 import os
-#%matplotlib inline #// Jupyter Notebooks only
+# %matplotlib inline #// Jupyter Notebooks only
 from sklearn.preprocessing import StandardScaler
 
 print('Done importing everything.  System ready to rip!')
@@ -38,6 +37,7 @@ def process_base_image_dir(basedir):
     print('Found types: {}'.format(img_types))
     return img_types
 
+
 def process_image_types(image_types, file_name, type_name):
     images = []
     for imtype in image_types:
@@ -49,6 +49,7 @@ def process_image_types(image_types, file_name, type_name):
 
     return images
 
+
 basedir = './data/vehicles'
 image_types = process_base_image_dir(basedir)
 cars = process_image_types(image_types, 'cars.txt', 'Vehicle')
@@ -59,6 +60,7 @@ notcars = process_image_types(image_types, 'notcars.txt', 'Non-Vehicle')
 
 del basedir, image_types
 print('Printed above size of test sets, also imported cars and notcars')
+
 
 #### Next Cell ###
 # Utility Function
@@ -81,6 +83,7 @@ def correct_for_colorspace_or_copy(image, color_space):
 
     return feature_image
 
+
 def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
     # Make a copy of the image
     imcopy = np.copy(img)
@@ -94,22 +97,25 @@ def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
 
 print('Loaded all utility functions')
 
+
 #### Next cell ####
 # Feature-specific functions
 def base_hog(should_visualize, img, orient, pix_per_cell, cell_per_block, feature_vec):
     return hog(
-            img,
-            orientations=orient,
-            pixels_per_cell=(pix_per_cell, pix_per_cell),
-            cells_per_block=(cell_per_block, cell_per_block),
-            transform_sqrt=False,
-            visualise=should_visualize,
-            feature_vector=feature_vec
+        img,
+        orientations=orient,
+        pixels_per_cell=(pix_per_cell, pix_per_cell),
+        cells_per_block=(cell_per_block, cell_per_block),
+        transform_sqrt=False,
+        visualise=should_visualize,
+        feature_vector=feature_vec
         )
+
 
 # Define a function to return HOG features and visualization
 def get_hog_features(img, orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True):
     return base_hog(vis, img, orient, pix_per_cell, cell_per_block, feature_vec)
+
 
 # Define a function to compute color histogram features
 # Pass the color_space flag as 3-letter all caps string
@@ -124,20 +130,21 @@ def bin_spatial(img, color_space='RGB', size=(32, 32)):
 
 
 # Define a function to compute color histogram features
-def color_hist(img, nbins=32): #, bins_range=(0, 256)):
+def color_hist(img, nbins=32):  # , bins_range=(0, 256)):
     # Compute the histogram of the color channels separately
     channel_1_hist = np.histogram(img[:, :, 0], bins=nbins)
     channel_2_hist = np.histogram(img[:, :, 1], bins=nbins)
     channel_3_hist = np.histogram(img[:, :, 2], bins=nbins)
 
     # Generating bin centers
-    #bin_edges = channel_1_hist[1]
-    #bin_centers = (bin_edges[1:] + bin_edges[0:len(bin_edges) - 1]) / 2
+    # bin_edges = channel_1_hist[1]
+    # bin_centers = (bin_edges[1:] + bin_edges[0:len(bin_edges) - 1]) / 2
 
     hist_features = np.concatenate((channel_1_hist[0], channel_2_hist[0], channel_3_hist[0]))
 
     return hist_features
-    #return channel_1_hist, channel_2_hist, channel_3_hist, bin_centers, hist_features
+    # return channel_1_hist, channel_2_hist, channel_3_hist, bin_centers, hist_features
+
 
 # Define a function to extract features from a list of images
 # Have this function call bin_spatial() and color_hist()
@@ -150,11 +157,11 @@ def extract_features(
         orient=9,
         pix_per_cell=9,
         cell_per_block=2,
-        hog_channel=0, # or ALL
+        hog_channel=0,  # or ALL
         spatial_feat=True,
         hist_feat=True,
         hog_feat=True
-):
+        ):
     features = []
     for file in imgs:
         image = mpimg.imread(file)
@@ -191,7 +198,6 @@ def single_img_features(
         spatial_feat,
         spatial_size
         ):
-
     img_features = []
     feature_image = correct_for_colorspace_or_copy(image, color_space)
     ### NOTE::: Extracting features need to be done in the same order as here
@@ -215,8 +221,8 @@ def single_img_features(
                         cell_per_block=cell_per_block,
                         vis=False,
                         feature_vec=True
+                        )
                     )
-                )
             hog_features = np.ravel(hog_features)
         else:
             hog_features = get_hog_features(
@@ -226,7 +232,7 @@ def single_img_features(
                 cell_per_block=cell_per_block,
                 vis=False,
                 feature_vec=True
-            )
+                )
 
         img_features.append(hog_features)
 
@@ -235,6 +241,7 @@ def single_img_features(
 
 
 print('Loaded Feature Extract Helper Functions!')
+
 
 #### Next cell ####
 
@@ -250,7 +257,7 @@ def slide_window(
         y_start_stop=[None, None],
         xy_window=(64, 64),
         xy_overlap=(0.5, 0.5)
-):
+        ):
     # If x and/or y start/stop positions not defined, set to image size
     if x_start_stop[0] == None:
         x_start_stop[0] = 0
@@ -264,13 +271,13 @@ def slide_window(
     xspan = x_start_stop[1] - x_start_stop[0]
     yspan = y_start_stop[1] - y_start_stop[0]
     # Compute the number of pixels per step in x/y
-    nx_pix_per_step = np.int(xy_window[0]*(1 - xy_overlap[0]))
-    ny_pix_per_step = np.int(xy_window[1]*(1 - xy_overlap[1]))
+    nx_pix_per_step = np.int(xy_window[0] * (1 - xy_overlap[0]))
+    ny_pix_per_step = np.int(xy_window[1] * (1 - xy_overlap[1]))
     # Compute the number of windows in x/y
-    nx_buffer = np.int(xy_window[0]*(xy_overlap[0]))
-    ny_buffer = np.int(xy_window[1]*(xy_overlap[1]))
-    nx_windows = np.int((xspan-nx_buffer)/nx_pix_per_step)
-    ny_windows = np.int((yspan-ny_buffer)/ny_pix_per_step)
+    nx_buffer = np.int(xy_window[0] * (xy_overlap[0]))
+    ny_buffer = np.int(xy_window[1] * (xy_overlap[1]))
+    nx_windows = np.int((xspan - nx_buffer) / nx_pix_per_step)
+    ny_windows = np.int((yspan - ny_buffer) / ny_pix_per_step)
     # Initialize a list to append window positions to
     window_list = []
     # Loop through finding x and y window positions
@@ -280,22 +287,23 @@ def slide_window(
     for ys in range(ny_windows):
         for xs in range(nx_windows):
             # Calculate window position
-            startx = xs*nx_pix_per_step + x_start_stop[0]
+            startx = xs * nx_pix_per_step + x_start_stop[0]
             endx = startx + xy_window[0]
-            starty = ys*ny_pix_per_step + y_start_stop[0]
+            starty = ys * ny_pix_per_step + y_start_stop[0]
             endy = starty + xy_window[1]
             # Append window position to list
             window_list.append(((startx, starty), (endx, endy)))
     # Return the list of windows
     return window_list
 
-print('Loaded up sliding window functions.  Watch out for that banana peel!')
 
+print('Loaded up sliding window functions.  Watch out for that banana peel!')
 
 #### Next cell ####
 # Testing stuff out
 
 OUTPUT_DIR = './output_images/{}'
+
 
 def show_or_save(output_file_name='did_not_supply_file_name.png'):
     if platform == 'darwin':
@@ -305,8 +313,8 @@ def show_or_save(output_file_name='did_not_supply_file_name.png'):
         print('Presuming to be in Jupyter Notebook, calling show()')
         plt.show()
 
-def run_feature_test(test_images, output_file_name='test_feature.png'):
 
+def run_feature_test(test_images, output_file_name='test_feature.png'):
     print('Testing out by picking randomly from {} images'.format(len(test_images)))
     features = extract_features(
         test_images,
@@ -314,7 +322,7 @@ def run_feature_test(test_images, output_file_name='test_feature.png'):
         spatial_size=(32, 32),
         hist_bins=32
         # , hist_range=(0, 256)
-    )
+        )
 
     if len(features) == 0:
         print('Your function only returns empty feature vectors...')
@@ -352,15 +360,17 @@ def run_sliding_windows_test(test_images, output_file_name='sliding_window_test.
         y_start_stop=[None, None],
         xy_window=(128, 128),
         xy_overlap=(0.5, 0.5)
-    )
+        )
 
     window_img = draw_boxes(image, windows, color=(155, 55, 255), thick=6)
     plt.figure()
     plt.imshow(window_img)
     show_or_save(output_file_name)
 
+
 if platform != 'darwin':  # Mac OSX
-    print('Only meant for running from command line!  Or maybe not?')  #TODO: Verify from Jupyter if needed, think it will work...
+    print('Only meant for running from command line!  Or maybe not?')  # TODO: Verify from Jupyter if needed, think
+    # it will work...
 else:
     test_images = glob.glob('./test_images/*.png')
     run_feature_test(test_images, 'feature_test.png')
