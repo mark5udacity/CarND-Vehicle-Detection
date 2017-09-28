@@ -80,7 +80,7 @@ def correct_for_colorspace_or_copy(image, color_space):
 
 #### Next cell ####
 # Feature-specific functions
-def base_hog(should_visualize, img, orient, pix_per_cell, cell_per_block):
+def base_hog(should_visualize, img, orient, pix_per_cell, cell_per_block, feature_vec):
     return hog(
             img,
             orientations=orient,
@@ -88,38 +88,12 @@ def base_hog(should_visualize, img, orient, pix_per_cell, cell_per_block):
             cells_per_block=(cell_per_block, cell_per_block),
             transform_sqrt=False,
             visualise=should_visualize,
-            feature_vector=False
+            feature_vector=feature_vec
         )
-
-# Define a function to return HOG features and visualization
-def get_hog_features_experiment(img, orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True):
-    return base_hog(vis, orient, pix_per_cell, cell_per_block, feature_vec)
-
 
 # Define a function to return HOG features and visualization
 def get_hog_features(img, orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True):
-    if vis == True:
-        features, hog_image = hog(
-            img,
-            orientations=orient,
-            pixels_per_cell=(pix_per_cell, pix_per_cell),
-            cells_per_block=(cell_per_block, cell_per_block),
-            transform_sqrt=False,
-            visualise=True,
-            feature_vector=False
-        )
-        return features, hog_image
-    else:
-        features = hog(
-            img,
-            orientations=orient,
-            pixels_per_cell=(pix_per_cell, pix_per_cell),
-            cells_per_block=(cell_per_block, cell_per_block),
-            transform_sqrt=False,
-            visualise=False,
-            feature_vector=feature_vec
-        )
-        return features
+    return base_hog(vis, img, orient, pix_per_cell, cell_per_block, feature_vec)
 
 # Define a function to compute color histogram features
 # Pass the color_space flag as 3-letter all caps string
@@ -162,8 +136,8 @@ def extract_features(
         pix_per_cell=9,
         cell_per_block=2,
         hog_channel=0, # or ALL
-        spatial_feat=True,
-        hist_feat=True,
+        spatial_feat=False,
+        hist_feat=False,
         hog_feat=True
 ):
     features = []
@@ -254,7 +228,7 @@ else:
         plt.title('Normalized Features')
         fig.tight_layout()
 
-        plt.savefig('./output_images/test_feature.png')
+        plt.savefig('./output_images/test_feature_hog_only.png')
         #plt.show()
 
 #### Next cell ###
