@@ -136,8 +136,8 @@ def extract_features(
         pix_per_cell=9,
         cell_per_block=2,
         hog_channel=0, # or ALL
-        spatial_feat=False,
-        hist_feat=False,
+        spatial_feat=True,
+        hist_feat=True,
         hog_feat=True
 ):
     features = []
@@ -228,7 +228,7 @@ else:
         plt.title('Normalized Features')
         fig.tight_layout()
 
-        plt.savefig('./output_images/test_feature_hog_only.png')
+        plt.savefig('./output_images/test_feature.png')
         #plt.show()
 
 #### Next cell ###
