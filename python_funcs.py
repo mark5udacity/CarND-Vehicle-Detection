@@ -19,10 +19,12 @@ import numpy as np
 from sys import platform
 
 import os
-# %matplotlib inline #// Jupyter Notebooks only
-from sklearn.cross_validation import train_test_split
+
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
+
+# %matplotlib inline #// Jupyter Notebooks only
 
 print('Done importing everything.  System ready to rip!')
 
@@ -108,6 +110,36 @@ def visualize(fig, rows, cols, imgs, titles):
         else:
             plt.imshow(img)
         plt.title(titles[1])
+
+
+def params_for_feature_extract(
+        color_space,
+        spatial_size,
+        hist_bins,
+        orient,
+        pix_per_cell,
+        cell_per_block,
+        hog_channel,
+        spatial_feat,
+        hist_feat,
+        hog_feat
+        ):
+    def call_with_input(input):
+        return extract_features(
+            input,
+            color_space=color_space,
+            spatial_size=spatial_size,
+            hist_bins=hist_bins,
+            orient=orient,
+            pix_per_cell=pix_per_cell,
+            cell_per_block=cell_per_block,
+            hog_channel=hog_channel,
+            spatial_feat=spatial_feat,
+            hist_feat=hist_feat,
+            hog_feat=hog_feat
+            )
+
+    return call_with_input
 
 print('Loaded all utility functions')
 
@@ -372,6 +404,7 @@ def show_or_save(output_file_name='did_not_supply_file_name.png'):
         print('Presuming to be in Jupyter Notebook, calling show()')
         plt.show()
 
+    plt.figure()
 
 def run_feature_test(test_images, output_file_name='test_feature.png'):
     print('Testing out by picking randomly from {} images'.format(len(test_images)))
@@ -422,25 +455,26 @@ def run_sliding_windows_test(test_images, output_file_name='sliding_window_test.
         )
 
     window_img = draw_boxes(image, windows, color=(155, 55, 255), thick=6)
-    plt.figure()
     plt.imshow(window_img)
     show_or_save(output_file_name)
 
-#Vehicles: image{00dd}.png (taken from GTI_left), {d].png
-#Non-Vehicles: image{d}.png, extra{d}.png
 
-
-def run_window_search_test(test_images, output_file_name='search_slide_test.png'):
-    # Read in cars and notcars
+def from_test_images(test_images):
     cars = []
     notcars = []
-    str = ""
+
     for file_name in test_images:
-        if 'extra' in file_name\
+        if 'extra' in file_name \
                 or ('image' in file_name.split('/')[-1] and '00' not in file_name):
             notcars.append(file_name)
         else:
             cars.append(file_name)
+
+    return cars, notcars
+
+def run_window_search_test(test_images, output_file_name='search_slide_test.png'):
+    # Read in cars and notcars
+    cars, notcars = from_test_images(test_images)
 
     # TODO: Apply to whole test data set here...
     sample_size = 500 # No need to reduce sample size, depending on how long this takes...
@@ -460,18 +494,21 @@ def run_window_search_test(test_images, output_file_name='search_slide_test.png'
     hog_feat = True  # HOG features on or off
     y_start_stop = [None, None]  # Min and max in y to search in slide_window()
 
-    car_features = extract_features(cars, color_space=color_space,
-                                    spatial_size=spatial_size, hist_bins=hist_bins,
-                                    orient=orient, pix_per_cell=pix_per_cell,
-                                    cell_per_block=cell_per_block,
-                                    hog_channel=hog_channel, spatial_feat=spatial_feat,
-                                    hist_feat=hist_feat, hog_feat=hog_feat)
-    notcar_features = extract_features(notcars, color_space=color_space,
-                                       spatial_size=spatial_size, hist_bins=hist_bins,
-                                       orient=orient, pix_per_cell=pix_per_cell,
-                                       cell_per_block=cell_per_block,
-                                       hog_channel=hog_channel, spatial_feat=spatial_feat,
-                                       hist_feat=hist_feat, hog_feat=hog_feat)
+    extract = params_for_feature_extract(
+        color_space=color_space,
+        spatial_size=spatial_size,
+        hist_bins=hist_bins,
+        orient=orient,
+        pix_per_cell=pix_per_cell,
+        cell_per_block=cell_per_block,
+        hog_channel=hog_channel,
+        spatial_feat=spatial_feat,
+        hist_feat=hist_feat,
+        hog_feat=hog_feat
+        )
+
+    car_features = extract(cars)
+    notcar_features = extract(notcars)
 
     X = np.vstack((car_features, notcar_features)).astype(np.float64)
     # Fit a per-column scaler
@@ -514,16 +551,25 @@ def run_window_search_test(test_images, output_file_name='search_slide_test.png'
     windows = slide_window(file, x_start_stop=[None, None], y_start_stop=y_start_stop,
                            xy_window=(96, 96), xy_overlap=(0.5, 0.5))
 
-    hot_windows = search_windows(file, windows, svc, X_scaler, color_space=color_space,
-                                 spatial_size=spatial_size, hist_bins=hist_bins,
-                                 orient=orient, pix_per_cell=pix_per_cell,
-                                 cell_per_block=cell_per_block,
-                                 hog_channel=hog_channel, spatial_feat=spatial_feat,
-                                 hist_feat=hist_feat, hog_feat=hog_feat)
+    hot_windows = search_windows(
+        file,
+        windows,
+        svc,
+        X_scaler,
+        color_space=color_space,
+        spatial_size=spatial_size,
+        hist_bins=hist_bins,
+        orient=orient,
+        pix_per_cell=pix_per_cell,
+        cell_per_block=cell_per_block,
+        hog_channel=hog_channel,
+        spatial_feat=spatial_feat,
+        hist_feat=hist_feat,
+        hog_feat=hog_feat
+        )
 
     window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
 
-    plt.figure()
     plt.imshow(window_img)
     show_or_save(output_file_name)
 
