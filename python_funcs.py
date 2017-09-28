@@ -157,50 +157,83 @@ def extract_features(
 ):
     features = []
     for file in imgs:
-        file_features = []
         image = mpimg.imread(file)
-        feature_image = correct_for_colorspace_or_copy(image, color_space)
-
-        ### NOTE::: Extracting features need to be done in the same order as here
-        ### NOTE::: Extracting features need to be done in the same order as here
-        ### NOTE::: Extracting features need to be done in the same order as here
-        if spatial_feat == True:
-            spatial_features = bin_spatial(feature_image, size=spatial_size)
-            file_features.append(spatial_features)
-        if hist_feat == True:
-            hist_features = color_hist(feature_image, nbins=hist_bins) #, bins_range=hist_range)
-            file_features.append(hist_features)
-        if hog_feat == True:
-            if hog_channel == 'ALL':
-                hog_features = []
-                for channel in range(feature_image.shape[2]):
-                    hog_features.append(
-                        get_hog_features(
-                            feature_image[:,:,channel],
-                            orient=orient,
-                            pix_per_cell=pix_per_cell,
-                            cell_per_block=cell_per_block,
-                            vis=False,
-                            feature_vec=True
-                        )
-                    )
-                hog_features = np.ravel(hog_features)
-            else:
-                hog_features = get_hog_features(
-                    feature_image[:, :, hog_channel],
-                    orient=orient,
-                    pix_per_cell=pix_per_cell,
-                    cell_per_block=cell_per_block,
-                    vis=False,
-                    feature_vec=True
-                )
-
-            file_features.append(hog_features)
-
-        #features.append(np.concatenate((spatial_features, hist_features)))
-        features.append(np.concatenate(file_features))
+        img_features = single_img_features(
+            cell_per_block,
+            color_space,
+            features,
+            hist_bins,
+            hist_feat,
+            hog_channel,
+            hog_feat,
+            image,
+            orient,
+            pix_per_cell,
+            spatial_feat,
+            spatial_size
+            )
+        features.append(img_features)
 
     return features
+
+
+def single_img_features(
+        cell_per_block,
+        color_space,
+        features,
+        hist_bins,
+        hist_feat,
+        hog_channel,
+        hog_feat,
+        image,
+        orient,
+        pix_per_cell,
+        spatial_feat,
+        spatial_size
+        ):
+
+    img_features = []
+    feature_image = correct_for_colorspace_or_copy(image, color_space)
+    ### NOTE::: Extracting features need to be done in the same order as here
+    ### NOTE::: Extracting features need to be done in the same order as here
+    ### NOTE::: Extracting features need to be done in the same order as here
+    if spatial_feat == True:
+        spatial_features = bin_spatial(feature_image, size=spatial_size)
+        img_features.append(spatial_features)
+    if hist_feat == True:
+        hist_features = color_hist(feature_image, nbins=hist_bins)  # , bins_range=hist_range)
+        img_features.append(hist_features)
+    if hog_feat == True:
+        if hog_channel == 'ALL':
+            hog_features = []
+            for channel in range(feature_image.shape[2]):
+                hog_features.append(
+                    get_hog_features(
+                        feature_image[:, :, channel],
+                        orient=orient,
+                        pix_per_cell=pix_per_cell,
+                        cell_per_block=cell_per_block,
+                        vis=False,
+                        feature_vec=True
+                    )
+                )
+            hog_features = np.ravel(hog_features)
+        else:
+            hog_features = get_hog_features(
+                feature_image[:, :, hog_channel],
+                orient=orient,
+                pix_per_cell=pix_per_cell,
+                cell_per_block=cell_per_block,
+                vis=False,
+                feature_vec=True
+            )
+
+        img_features.append(hog_features)
+
+    # features.append(np.concatenate((spatial_features, hist_features)))
+    return np.concatenate(img_features)
+
+
 print('Loaded Feature Extract Helper Functions!')
 
 #### Next cell ####
