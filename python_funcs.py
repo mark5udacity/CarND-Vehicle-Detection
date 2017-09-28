@@ -3,6 +3,7 @@ import glob
 import pickle
 
 import matplotlib
+import time
 from ipywidgets import widgets
 from ipywidgets import interact
 
@@ -19,7 +20,9 @@ from sys import platform
 
 import os
 # %matplotlib inline #// Jupyter Notebooks only
+from sklearn.cross_validation import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.svm import LinearSVC
 
 print('Done importing everything.  System ready to rip!')
 
@@ -166,14 +169,13 @@ def extract_features(
     for file in imgs:
         image = mpimg.imread(file)
         img_features = single_img_features(
-            cell_per_block,
+            image,
             color_space,
-            features,
             hist_bins,
             hist_feat,
             hog_channel,
             hog_feat,
-            image,
+            cell_per_block,
             orient,
             pix_per_cell,
             spatial_feat,
@@ -185,14 +187,13 @@ def extract_features(
 
 
 def single_img_features(
-        cell_per_block,
+        image,
         color_space,
-        features,
         hist_bins,
         hist_feat,
         hog_channel,
         hog_feat,
-        image,
+        cell_per_block,
         orient,
         pix_per_cell,
         spatial_feat,
@@ -297,6 +298,53 @@ def slide_window(
     return window_list
 
 
+# Define a function you will pass an image
+# and the list of windows to be searched (output of slide_windows())
+def search_windows(
+        img,
+        windows,
+        clf,
+        scaler,
+        color_space='RGB',
+        spatial_size=(32, 32),
+        hist_bins=32,
+        hist_range=(0, 256),
+        orient=9,
+        pix_per_cell=8,
+        cell_per_block=2,
+        hog_channel=0,
+        spatial_feat=True,
+        hist_feat=True,
+        hog_feat=True
+        ):
+
+    on_positive_windows = []
+    for window in windows:
+        test_img = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]], (64, 64))
+        # 4) Extract features for that window using single_img_features()
+        features = single_img_features(
+            image=test_img,
+            color_space=color_space,
+            spatial_size=spatial_size,
+            hist_bins=hist_bins,
+            orient=orient,
+            pix_per_cell=pix_per_cell,
+            cell_per_block=cell_per_block,
+            hog_channel=hog_channel,
+            spatial_feat=spatial_feat,
+            hist_feat=hist_feat,
+            hog_feat=hog_feat
+            )
+        # 5) Scale extracted features to be fed to classifier
+        test_features = scaler.transform(np.array(features).reshape(1, -1))
+        # 6) Predict using your classifier
+        prediction = clf.predict(test_features)
+        # 7) If positive (prediction == 1) then save the window
+        if prediction == 1:
+            on_positive_windows.append(window)
+    return on_positive_windows
+
+
 print('Loaded up sliding window functions.  Watch out for that banana peel!')
 
 #### Next cell ####
@@ -367,6 +415,105 @@ def run_sliding_windows_test(test_images, output_file_name='sliding_window_test.
     plt.imshow(window_img)
     show_or_save(output_file_name)
 
+#Vehicles: image{00dd}.png (taken from GTI_left), {d].png
+#Non-Vehicles: image{d}.png, extra{d}.png
+
+
+def run_window_search_test(test_images, output_file_name='search_slide_test.png'):
+    # Read in cars and notcars
+    cars = []
+    notcars = []
+    str = ""
+    for file_name in test_images:
+        if 'extra' in file_name\
+                or ('image' in file_name.split('/')[-1] and '00' not in file_name):
+            notcars.append(file_name)
+        else:
+            cars.append(file_name)
+
+    sample_size = 500 # No need to reduce sample size, depending on how long this takes...
+    cars = cars[0:sample_size]
+    notcars = notcars[0:sample_size]
+
+    ### TODO: Tweak these parameters and see how the results change.
+    color_space = 'RGB'  # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
+    orient = 9  # HOG orientations
+    pix_per_cell = 8  # HOG pixels per cell
+    cell_per_block = 2  # HOG cells per block
+    hog_channel = 0  # Can be 0, 1, 2, or "ALL"
+    spatial_size = (16, 16)  # Spatial binning dimensions
+    hist_bins = 16  # Number of histogram bins
+    spatial_feat = True  # Spatial features on or off
+    hist_feat = True  # Histogram features on or off
+    hog_feat = True  # HOG features on or off
+    y_start_stop = [None, None]  # Min and max in y to search in slide_window()
+
+    car_features = extract_features(cars, color_space=color_space,
+                                    spatial_size=spatial_size, hist_bins=hist_bins,
+                                    orient=orient, pix_per_cell=pix_per_cell,
+                                    cell_per_block=cell_per_block,
+                                    hog_channel=hog_channel, spatial_feat=spatial_feat,
+                                    hist_feat=hist_feat, hog_feat=hog_feat)
+    notcar_features = extract_features(notcars, color_space=color_space,
+                                       spatial_size=spatial_size, hist_bins=hist_bins,
+                                       orient=orient, pix_per_cell=pix_per_cell,
+                                       cell_per_block=cell_per_block,
+                                       hog_channel=hog_channel, spatial_feat=spatial_feat,
+                                       hist_feat=hist_feat, hog_feat=hog_feat)
+
+    X = np.vstack((car_features, notcar_features)).astype(np.float64)
+    # Fit a per-column scaler
+    X_scaler = StandardScaler().fit(X)
+    # Apply the scaler to X
+    scaled_X = X_scaler.transform(X)
+
+    # Define the labels vector
+    y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
+
+    # Split up data into randomized training and test sets
+    rand_state = np.random.randint(0, 100)
+    X_train, X_test, y_train, y_test = train_test_split(
+        scaled_X, y, test_size=0.2, random_state=rand_state)
+
+    print('Using:', orient, 'orientations', pix_per_cell,
+          'pixels per cell and', cell_per_block, 'cells per block')
+    print('Feature vector length:', len(X_train[0]))
+    # Use a linear SVC
+    svc = LinearSVC()
+    # Check the training time for the SVC
+    t = time.time()
+    svc.fit(X_train, y_train)
+    t2 = time.time()
+    print(round(t2 - t, 2), 'Seconds to train SVC...')
+    # Check the score of the SVC
+    print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
+    # Check the prediction time for a single sample
+    t = time.time()
+
+    jpg_img_idx = np.random.randint(1, 7)
+    file = mpimg.imread('./test_images/test{}.jpg'.format(jpg_img_idx)) # mpimg.imread('bbox-example-image.jpg')
+    draw_image = np.copy(file)
+
+    # Uncomment the following line if you extracted training
+    # data from .png images (scaled 0 to 1 by mpimg) and the
+    # image you are searching is a .jpg (scaled 0 to 255)
+    # image = image.astype(np.float32)/255
+
+    windows = slide_window(file, x_start_stop=[None, None], y_start_stop=y_start_stop,
+                           xy_window=(96, 96), xy_overlap=(0.5, 0.5))
+
+    hot_windows = search_windows(file, windows, svc, X_scaler, color_space=color_space,
+                                 spatial_size=spatial_size, hist_bins=hist_bins,
+                                 orient=orient, pix_per_cell=pix_per_cell,
+                                 cell_per_block=cell_per_block,
+                                 hog_channel=hog_channel, spatial_feat=spatial_feat,
+                                 hist_feat=hist_feat, hog_feat=hog_feat)
+
+    window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
+
+    plt.figure()
+    plt.imshow(window_img)
+    show_or_save(output_file_name)
 
 if platform != 'darwin':  # Mac OSX
     print('Only meant for running from command line!  Or maybe not?')  # TODO: Verify from Jupyter if needed, think
@@ -375,6 +522,7 @@ else:
     test_images = glob.glob('./test_images/*.png')
     run_feature_test(test_images, 'feature_test.png')
     run_sliding_windows_test(test_images)
+    run_window_search_test(test_images)
     del test_images
 
 print("All done testing!  How's it lookin'!?")
