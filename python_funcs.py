@@ -97,6 +97,17 @@ def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
     # Return the image copy with boxes drawn
     return imcopy
 
+# Thanks to Q&A
+def visualize(fig, rows, cols, imgs, titles):
+    for i, img, in enumerate(imgs):
+        plt.subplot(rows, cols, i+1)
+        plt.title(i+1)
+        img_dims = len(img.shape)
+        if img_dims < 3:
+            plt.imshow(img, cmap='hot')
+        else:
+            plt.imshow(img)
+        plt.title(titles[1])
 
 print('Loaded all utility functions')
 
@@ -431,6 +442,7 @@ def run_window_search_test(test_images, output_file_name='search_slide_test.png'
         else:
             cars.append(file_name)
 
+    # TODO: Apply to whole test data set here...
     sample_size = 500 # No need to reduce sample size, depending on how long this takes...
     cars = cars[0:sample_size]
     notcars = notcars[0:sample_size]
