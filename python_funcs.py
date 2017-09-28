@@ -154,7 +154,7 @@ def color_hist(img, nbins=32): #, bins_range=(0, 256)):
 # Have this function call bin_spatial() and color_hist()
 def extract_features(
         imgs,
-        cspace='RGB',
+        color_space='RGB',
         spatial_size=(32, 32),
         hist_bins=32
         # , hist_range=(0, 256)
@@ -162,7 +162,7 @@ def extract_features(
     features = []
     for file in imgs:
         image = mpimg.imread(file)
-        feature_image = correct_for_colorspace_or_copy(image, cspace)
+        feature_image = correct_for_colorspace_or_copy(image, color_space)
         spatial_features = bin_spatial(feature_image, size=spatial_size)
         hist_features = color_hist(feature_image, nbins=hist_bins) #, bins_range=hist_range)
         features.append(np.concatenate((spatial_features, hist_features)))
@@ -180,7 +180,7 @@ else:
 
     features = extract_features(
         test_images,
-        cspace='RGB',
+        color_space='RGB',
         spatial_size=(32, 32),
         hist_bins=32
         #, hist_range=(0, 256)
