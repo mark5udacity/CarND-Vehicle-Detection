@@ -2,6 +2,7 @@ import cv2
 import glob
 import pickle
 
+import matplotlib
 from ipywidgets import widgets
 from ipywidgets import interact
 
@@ -18,7 +19,8 @@ from sys import platform
 
 
 import os
-# %matplotlib inline // Jupyter Notebooks only
+#%matplotlib inline #// Jupyter Notebooks only
+from sklearn.preprocessing import StandardScaler
 
 print('Done importing everything.  System ready to rip!')
 
@@ -54,8 +56,30 @@ basedir = './data/non-vehicles'
 image_types = os.listdir(basedir)
 notcars = process_image_types(image_types, 'notcars.txt', 'Non-Vehicle')
 
-#### Next cell ####
+#### Next Cell ###
+# Utility Function
 
+def correct_for_colorspace_or_copy(image, color_space):
+    feature_image = None
+    if color_space != 'RGB':
+        if color_space == 'HSV':
+            feature_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        elif color_space == 'LUV':
+            feature_image = cv2.cvtColor(image, cv2.COLOR_RGB2LUV)
+        elif color_space == 'HLS':
+            feature_image = cv2.cvtColor(image, cv2.COLOR_RGB2HLS)
+        elif color_space == 'YUV':
+            feature_image = cv2.cvtColor(image, cv2.COLOR_RGB2YUV)
+        elif color_space == 'YCrCb':
+            feature_image = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
+    else:
+        feature_image = np.copy(image)
+
+    return feature_image
+
+
+#### Next cell ####
+# Feature-specific functions
 def base_hog(should_visualize, img, orient, pix_per_cell, cell_per_block):
     return hog(
             img,
@@ -102,19 +126,7 @@ def get_hog_features(img, orient, pix_per_cell, cell_per_block, vis=False, featu
 # like 'HSV' or 'LUV' etc.
 def bin_spatial(img, color_space='RGB', size=(32, 32)):
     # Convert image to new color space (if specified)
-    if color_space != 'RGB':
-        if color_space == 'HSV':
-            feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-        elif color_space == 'LUV':
-            feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2LUV)
-        elif color_space == 'HLS':
-            feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
-        elif color_space == 'YUV':
-            feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2YUV)
-        elif color_space == 'YCrCb':
-            feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2YCrCb)
-    else:
-        feature_image = np.copy(img)
+    feature_image = correct_for_colorspace_or_copy(img, color_space=color_space)
     # Use cv2.resize().ravel() to create the feature vector
     features = cv2.resize(feature_image, size).ravel()
     # Return the feature vector
@@ -137,4 +149,67 @@ def color_hist(img, nbins=32): #, bins_range=(0, 256)):
     return hist_features
     #return channel_1_hist, channel_2_hist, channel_3_hist, bin_centers, hist_features
 
+
+# Define a function to extract features from a list of images
+# Have this function call bin_spatial() and color_hist()
+def extract_features(
+        imgs,
+        cspace='RGB',
+        spatial_size=(32, 32),
+        hist_bins=32
+        # , hist_range=(0, 256)
+):
+    features = []
+    for file in imgs:
+        image = mpimg.imread(file)
+        feature_image = correct_for_colorspace_or_copy(image, cspace)
+        spatial_features = bin_spatial(feature_image, size=spatial_size)
+        hist_features = color_hist(feature_image, nbins=hist_bins) #, bins_range=hist_range)
+        features.append(np.concatenate((spatial_features, hist_features)))
+    return features
+
+
 #### Next cell ####
+# Testing stuff out
+
+if platform != 'darwin':  # Mac OSX
+    print('Only meant for running from command line!')
+    #return
+else:
+    test_images = glob.glob("./test_images/*.png")
+
+    features = extract_features(
+        test_images,
+        cspace='RGB',
+        spatial_size=(32, 32),
+        hist_bins=32
+        #, hist_range=(0, 256)
+    )
+
+    if len(features) == 0:
+        print('Your function only returns empty feature vectors...')
+    else:
+        # Create an array stack of feature vectors
+        X = np.vstack(features).astype(np.float64) #, notcar_features
+        # Fit a per-column scaler
+        X_scaler = StandardScaler().fit(X)
+        # Apply the scaler to X
+        scaled_X = X_scaler.transform(X)
+        features_ind = np.random.randint(0, len(features))
+        # Plot an example of raw and scaled features
+        fig = plt.figure(figsize=(12, 4))
+        plt.subplot(131)
+        plt.imshow(mpimg.imread(test_images[features_ind]))
+        plt.title('Original Image')
+        plt.subplot(132)
+        plt.plot(X[features_ind])
+        plt.title('Raw Features')
+        plt.subplot(133)
+        plt.plot(scaled_X[features_ind])
+        plt.title('Normalized Features')
+        fig.tight_layout()
+
+        plt.savefig('./output_images/test_feature .png')
+        #plt.show()
+
+#### Next cell ###
