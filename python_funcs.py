@@ -543,38 +543,77 @@ def run_window_search_test(test_images, output_file_name='search_slide_test_{}.p
         # image you are searching is a .jpg (scaled 0 to 255)
         image = image.astype(np.float32)/255
 
-        t1 = time.time()
-        windows = slide_window(
-            image,
-            x_start_stop=[None, None],
-            y_start_stop=y_start_stop,
-            xy_window=(96, 96),
-            xy_overlap=(0.5, 0.5)
-            )
-
-        hot_windows = search_windows(
-            image,
-            windows,
-            svc,
+        window_img = process_image(
             X_scaler,
-            color_space=color_space,
-            spatial_size=spatial_size,
-            hist_bins=hist_bins,
-            orient=orient,
-            pix_per_cell=pix_per_cell,
-            cell_per_block=cell_per_block,
-            hog_channel=hog_channel,
-            spatial_feat=spatial_feat,
-            hist_feat=hist_feat,
-            hog_feat=hog_feat
+            cell_per_block,
+            color_space,
+            draw_image,
+            hist_bins,
+            hist_feat,
+            hog_channel,
+            hog_feat,
+            image,
+            orient,
+            pix_per_cell,
+            spatial_feat,
+            spatial_size,
+            svc,
+            y_start_stop
             )
 
-        window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
-        t2 = time.time()
-
-        print(round(t2 - t1, 2), 'Seconds to process single image...')
         plt.imshow(window_img)
         show_or_save(output_file_name.format(jpg_img_idx + 1))
+
+
+def process_image(
+        X_scaler,
+        cell_per_block,
+        color_space,
+        draw_image,
+        hist_bins,
+        hist_feat,
+        hog_channel,
+        hog_feat,
+        image,
+        orient,
+        pix_per_cell,
+        spatial_feat,
+        spatial_size,
+        svc,
+        y_start_stop
+        ):
+    t1 = time.time()
+
+    windows = slide_window(
+        image,
+        x_start_stop=[None, None],
+        y_start_stop=y_start_stop,
+        xy_window=(96, 96),
+        xy_overlap=(0.5, 0.5)
+        )
+
+    hot_windows = search_windows(
+        image,
+        windows,
+        svc,
+        X_scaler,
+        color_space=color_space,
+        spatial_size=spatial_size,
+        hist_bins=hist_bins,
+        orient=orient,
+        pix_per_cell=pix_per_cell,
+        cell_per_block=cell_per_block,
+        hog_channel=hog_channel,
+        spatial_feat=spatial_feat,
+        hist_feat=hist_feat,
+        hog_feat=hog_feat
+        )
+
+    window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
+    t2 = time.time()
+    print(round(t2 - t1, 2), 'Seconds to process single image...')
+    return window_img
+
 
 def train_classifier(
         cell_per_block,
