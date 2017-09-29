@@ -491,7 +491,7 @@ def from_data_set(num_samples=None):
     else:
         return cars, notcars
 
-def run_window_search_test(test_images, output_file_name='search_slide_test.png'):
+def run_window_search_test(test_images, output_file_name='search_slide_test_{}.png'):
     print('Running window search test with classification')
     # Read in cars and notcars
     cars, notcars = from_data_set(num_samples=1000)
@@ -508,7 +508,7 @@ def run_window_search_test(test_images, output_file_name='search_slide_test.png'
     spatial_feat = True  # Spatial features on or off
     hist_feat = True  # Histogram features on or off
     hog_feat = True  # HOG features on or off
-    y_start_stop = [None, None]  # Min and max in y to search in slide_window()
+    y_start_stop = [400, 650]  # Min and max in y to search in slide_window()
 
     extract = params_for_feature_extract(
         color_space=color_space,
@@ -555,39 +555,45 @@ def run_window_search_test(test_images, output_file_name='search_slide_test.png'
     # Check the prediction time for a single sample
     t = time.time()
 
-    jpg_img_idx = np.random.randint(1, 7)
-    image = mpimg.imread('./test_images/test{}.jpg'.format(jpg_img_idx)) # mpimg.imread('bbox-example-image.jpg')
-    draw_image = np.copy(image)
+    #jpg_img_idx = np.random.randint(1, 7)
+    for jpg_img_idx in range(6):
+        image = mpimg.imread('./test_images/test{}.jpg'.format(jpg_img_idx + 1)) # mpimg.imread('bbox-example-image.jpg')
+        draw_image = np.copy(image)
 
-    # Uncomment the following line if you extracted training
-    # data from .png images (scaled 0 to 1 by mpimg) and the
-    # image you are searching is a .jpg (scaled 0 to 255)
-    image = image.astype(np.float32)/255
+        # Uncomment the following line if you extracted training
+        # data from .png images (scaled 0 to 1 by mpimg) and the
+        # image you are searching is a .jpg (scaled 0 to 255)
+        image = image.astype(np.float32)/255
 
-    windows = slide_window(image, x_start_stop=[None, None], y_start_stop=y_start_stop,
-                           xy_window=(96, 96), xy_overlap=(0.5, 0.5))
+        windows = slide_window(
+            image,
+            x_start_stop=[None, None],
+            y_start_stop=y_start_stop,
+            xy_window=(96, 96),
+            xy_overlap=(0.5, 0.5)
+            )
 
-    hot_windows = search_windows(
-        image,
-        windows,
-        svc,
-        X_scaler,
-        color_space=color_space,
-        spatial_size=spatial_size,
-        hist_bins=hist_bins,
-        orient=orient,
-        pix_per_cell=pix_per_cell,
-        cell_per_block=cell_per_block,
-        hog_channel=hog_channel,
-        spatial_feat=spatial_feat,
-        hist_feat=hist_feat,
-        hog_feat=hog_feat
-        )
+        hot_windows = search_windows(
+            image,
+            windows,
+            svc,
+            X_scaler,
+            color_space=color_space,
+            spatial_size=spatial_size,
+            hist_bins=hist_bins,
+            orient=orient,
+            pix_per_cell=pix_per_cell,
+            cell_per_block=cell_per_block,
+            hog_channel=hog_channel,
+            spatial_feat=spatial_feat,
+            hist_feat=hist_feat,
+            hog_feat=hog_feat
+            )
 
-    window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
+        window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
 
-    plt.imshow(window_img)
-    show_or_save(output_file_name)
+        plt.imshow(window_img)
+        show_or_save(output_file_name.format(jpg_img_idx + 1))
 
 
 # Thanks to Q&A
