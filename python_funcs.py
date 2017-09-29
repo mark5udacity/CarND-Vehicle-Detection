@@ -100,6 +100,46 @@ ALL_HOG_CHANNELS = 'ALL'
 X_SCALER_FILE = "X_scaler_pickle.p"
 SVC_PICKLE_FILE = "svc_pickle.p"
 
+
+## THIS HAS ALL THE PARAMS TUNED
+def common_params(
+        func_to_apply,
+        deboog_name,
+        color_space = 'YCrCb',  # Also can be RGB, HSV, LUV, HLS, YUV, YCrCb
+        spatial_size = (16, 16),
+        hist_bins = 16,
+        orient = 9,
+        pix_per_cell = 8,
+        cell_per_block = 2,
+        hog_channel = ALL_HOG_CHANNELS,
+        spatial_feat=True,  # results in 3,072
+        hist_feat=False,  # results in 96
+        hog_feat=False,  # results in 5,292
+        ):
+
+    print('Using:', orient, 'orientations',
+          pix_per_cell, 'pixels per cell and',
+          cell_per_block, 'cells per block')
+
+    def call_with_input(input):
+        print('{}...'.format(deboog_name))
+        return func_to_apply(
+            *input,
+            color_space=color_space,
+            spatial_size=spatial_size,
+            hist_bins=hist_bins,
+            orient=orient,
+            pix_per_cell=pix_per_cell,
+            cell_per_block=cell_per_block,
+            hog_channel=hog_channel,
+            spatial_feat=spatial_feat,
+            hist_feat=hist_feat,
+            hog_feat=hog_feat
+            )
+
+    return call_with_input
+
+
 def correct_for_colorspace_or_copy(image, color_space):
     feature_image = None
     if color_space != 'RGB':
@@ -129,35 +169,6 @@ def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
     # Return the image copy with boxes drawn
     return imcopy
 
-def params_for_feature_extract(
-        color_space = 'YCrCb',
-        spatial_size = (16, 16),
-        hist_bins = 16,
-        orient = 9,
-        pix_per_cell = 8,
-        cell_per_block = 2,
-        hog_channel = ALL_HOG_CHANNELS,
-        spatial_feat = True,
-        hist_feat = True,
-        hog_feat = True
-        ):
-    def call_with_input(input):
-        print('Extracting features....')
-        return extract_features(
-            input,
-            color_space=color_space,
-            spatial_size=spatial_size,
-            hist_bins=hist_bins,
-            orient=orient,
-            pix_per_cell=pix_per_cell,
-            cell_per_block=cell_per_block,
-            hog_channel=hog_channel,
-            spatial_feat=spatial_feat,
-            hist_feat=hist_feat,
-            hog_feat=hog_feat
-            )
-
-    return call_with_input
 
 def load_classifier():
     print('Loading SVC and X_Scaler')
@@ -236,7 +247,7 @@ def color_hist(img, nbins=32):
 # Have this function call bin_spatial() and color_hist()
 def extract_features(
         imgs,
-        color_space='YCrCb',  # Also can be RGB, HSV, LUV, HLS, YUV, YCrCb
+        color_space,
         spatial_size=(24, 24), # next try 32
         hist_bins=24,
         orient=9,
@@ -263,7 +274,8 @@ def extract_features(
             spatial_feat,
             spatial_size
             )
-        features.append(img_features)
+
+        if len(img_features) != 0: features.append(img_features)
 
     return features
 
@@ -285,18 +297,19 @@ def hog_params(feature_image, orient, pix_per_cell, cell_per_block, feature_vec)
 def single_img_features(
         image,
         # CLEANME: Instead, pass in list of features that return what to append, and then no need for all these params...
-        color_space='YCrCb',
-        hist_bins=16,
-        hist_feat=True,
-        hog_channel=ALL_HOG_CHANNELS,
-        hog_feat=True,
-        cell_per_block=3,
-        orient=9,
-        pix_per_cell=7,
-        spatial_feat=True,
-        spatial_size=(16, 16),
-        viz=False # CLEANME: Remove this, muddied up API and not needed here.
+        color_space,
+        hist_bins,
+        hist_feat,
+        hog_channel,
+        hog_feat,
+        cell_per_block,
+        orient,
+        pix_per_cell,
+        spatial_feat,
+        spatial_size
+        #viz = False,  # CLEANME: Remove this, muddied up API and not needed here.
         ):
+    viz = False # turn true for use with visualize_hog_features
     img_features = []
     hog_images = []
     feature_image = correct_for_colorspace_or_copy(image, color_space)
@@ -336,6 +349,10 @@ def single_img_features(
         img_features.append(hog_features)
 
     # features.append(np.concatenate((spatial_features, hist_features)))
+    if (len(img_features) == 0):
+        print('No features produced, did you turn them all off or some other exception?')
+        return []
+
     result = np.concatenate(img_features)
     if viz:
         return result, hog_images
@@ -406,16 +423,16 @@ def search_windows(
         windows,
         clf,
         scaler,
-        color_space='RGB',
-        spatial_size=(32, 32),
-        hist_bins=32,
-        orient=9,
-        pix_per_cell=8,
-        cell_per_block=2,
-        hog_channel=0,
-        spatial_feat=True,
-        hist_feat=True,
-        hog_feat=True
+        color_space,
+        spatial_size,
+        hist_bins,
+        orient,
+        pix_per_cell,
+        cell_per_block,
+        hog_channel,
+        spatial_feat,
+        hist_feat,
+        hog_feat
         ):
 
     on_positive_windows = []
@@ -464,8 +481,8 @@ def train_classifier(
     # TODO: When done, should_save should go here, so choice is binary to train or load up.
     # Consider: the very first time, if told to load and nothing exists, don't proceed
     #if should_save:
-    car_features = extract(cars)
-    notcar_features = extract(notcars)
+    car_features = extract([cars])
+    notcar_features = extract([notcars])
     X = np.vstack((car_features, notcar_features)).astype(np.float64)
     # Fit a per-column scaler
     X_scaler = StandardScaler().fit(X)
@@ -499,20 +516,20 @@ def train_classifier(
 
 def process_image(
         X_scaler,
+        image,
+        draw_image,
+        svc,
+        y_start_stop,
         cell_per_block,
         color_space,
-        draw_image,
         hist_bins,
         hist_feat,
         hog_channel,
         hog_feat,
-        image,
         orient,
         pix_per_cell,
         spatial_feat,
         spatial_size,
-        svc,
-        y_start_stop
         ):
     t1 = time.time()
 
@@ -554,19 +571,14 @@ print('Done loading the big Kahunas, process and train!')
 def run_feature_test(test_images, output_file_name='test_feature_{}.png'):
     print('Testing out feature extraction by picking randomly from {} images'.format(len(test_images)))
 
-    features = extract_features(
-        test_images,
-        color_space='YCrCb',
-        spatial_size=(32, 32),
-        hist_bins=32,
-        spatial_feat=True,
-        hist_feat=False,
-        hog_feat=False
-        )
+    extract = common_params(extract_features, 'Extracting features')
+    features = extract([test_images])
 
     if len(features) == 0:
         print('Your function only returns empty feature vectors...')
         return
+
+    #print('Feature vector length:', len(features[0]))
 
     # Create an array stack of feature vectors
     X = np.vstack(features).astype(np.float64)
@@ -614,35 +626,8 @@ def run_sliding_windows_test(test_images, output_file_name='sliding_window_test.
 def run_window_search_test(test_images, output_file_name='search_slide_test_{}.png'):
     print('Running window search test with classification')
 
-    ### TODO: Tweak these parameters and see how the results change.
-    color_space = 'YCrCb'  # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
-    orient = 9  # HOG orientations
-    pix_per_cell = 8  # HOG pixels per cell
-    cell_per_block = 2  # HOG cells per block
-    hog_channel = ALL_HOG_CHANNELS  # Can be 0, 1, 2, or "ALL"
-    spatial_size = (16, 16)  # Spatial binning dimensions
-    hist_bins = 16  # Number of histogram bins
-    spatial_feat = True  # Spatial features on or off
-    hist_feat = True  # Histogram features on or off
-    hog_feat = True  # HOG features on or off
-    y_start_stop = [400, 670]  # Min and max in y to search in slide_window()
+    extract = common_params(extract_features, 'Extracting features')
 
-    extract = params_for_feature_extract(
-        color_space=color_space,
-        spatial_size=spatial_size,
-        hist_bins=hist_bins,
-        orient=orient,
-        pix_per_cell=pix_per_cell,
-        cell_per_block=cell_per_block,
-        hog_channel=hog_channel,
-        spatial_feat=spatial_feat,
-        hist_feat=hist_feat,
-        hog_feat=hog_feat
-        )
-
-    print('Using:', orient, 'orientations',
-          pix_per_cell, 'pixels per cell and',
-          cell_per_block, 'cells per block')
 
     #X_scaler, svc = load_classifier()
     X_scaler, svc = train_classifier(extract)
@@ -657,23 +642,9 @@ def run_window_search_test(test_images, output_file_name='search_slide_test_{}.p
         # image you are searching is a .jpg (scaled 0 to 255)
         image = image.astype(np.float32)/255
 
-        window_img = process_image(
-            X_scaler,
-            cell_per_block,
-            color_space,
-            draw_image,
-            hist_bins,
-            hist_feat,
-            hog_channel,
-            hog_feat,
-            image,
-            orient,
-            pix_per_cell,
-            spatial_feat,
-            spatial_size,
-            svc,
-            y_start_stop
-            )
+        process = common_params(process_image, 'Processing image')
+        y_start_stop = [400, 670]  # Min and max in y to search in slide_window()
+        window_img = process([X_scaler, image, draw_image, svc, y_start_stop])
 
         plt.imshow(window_img)
         show_or_save(output_file_name.format(jpg_img_idx + 1))
@@ -686,8 +657,10 @@ def visualize_feature_extract(output_file_name, viz=False):
     car_image = mpimg.imread(cars[car_ind])
     notcar_image = mpimg.imread(notcars[notcar_ind])
 
-    car_features, car_hog_image = single_img_features(image=car_image, viz=viz)
-    notcar_features, notcar_hog_image = single_img_features(image=notcar_image, viz=viz)
+    extract_img_feature = common_params(single_img_features)
+
+    car_features, car_hog_image = extract_img_feature(image=car_image, viz=viz) ##blech...
+    notcar_features, notcar_hog_image = extract_img_feature(image=notcar_image, viz=viz)
 
     images = [car_image, car_hog_image, notcar_image, notcar_hog_image]
     titles = ['Car Image', 'Car HOG', 'Not Car', 'Not Car HOG']
@@ -706,8 +679,8 @@ def visualize_feature_extract(output_file_name, viz=False):
     show_or_save(output_file_name)
 
 # Thanks to Q&A
-def visualize_hog(output_file_name='visualize_hog.png'):
-    visualize_hog(output_file_name=output_file_name, viz=True)
+#def visualize_hog(output_file_name='visualize_hog.png'):
+#    visualize_feature_extract(output_file_name=output_file_name, viz=True)
 
 
 if platform != 'darwin':  # Mac OSX
@@ -717,10 +690,10 @@ else:
     test_images = glob.glob('./test_images/*.png')
 
     run_feature_test(test_images) #, 'feature_test.png')
-    #run_sliding_windows_test(test_images)
+    run_sliding_windows_test(test_images)
     #visualize_hog()
     #visualize_hog(output_file_name='visualize_hog2.png')
-    #run_window_search_test(test_images)
+    run_window_search_test(test_images)
 
     del test_images
 
