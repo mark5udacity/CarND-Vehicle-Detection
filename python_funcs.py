@@ -143,6 +143,18 @@ def load_classifier():
 
     return X_scaler, svc
 
+OUTPUT_DIR = './output_images/{}'
+
+def show_or_save(output_file_name='did_not_supply_file_name.png'):
+    if platform == 'darwin':
+        print('Presuming to be on a mac, saving to file')
+        plt.savefig(OUTPUT_DIR.format(output_file_name))
+    else:
+        print('Presuming to be in Jupyter Notebook, calling show()')
+        plt.show()
+
+    plt.figure()
+
 print('Loaded all utility functions and some constants')
 
 
@@ -413,20 +425,6 @@ def search_windows(
 print('Loaded up sliding window functions.  Watch out for that banana peel!')
 
 #### Next cell ####
-# Testing stuff out
-
-OUTPUT_DIR = './output_images/{}'
-
-
-def show_or_save(output_file_name='did_not_supply_file_name.png'):
-    if platform == 'darwin':
-        print('Presuming to be on a mac, saving to file')
-        plt.savefig(OUTPUT_DIR.format(output_file_name))
-    else:
-        print('Presuming to be in Jupyter Notebook, calling show()')
-        plt.show()
-
-    plt.figure()
 
 def run_feature_test(test_images, output_file_name='test_feature.png'):
     print('Testing out feature extraction by picking randomly from {} images'.format(len(test_images)))
@@ -481,7 +479,61 @@ def run_sliding_windows_test(test_images, output_file_name='sliding_window_test.
     plt.imshow(window_img)
     show_or_save(output_file_name)
 
+##### Next Cell ####
+# The pipeline, bringing it all together!
 
+def process_image(
+        X_scaler,
+        cell_per_block,
+        color_space,
+        draw_image,
+        hist_bins,
+        hist_feat,
+        hog_channel,
+        hog_feat,
+        image,
+        orient,
+        pix_per_cell,
+        spatial_feat,
+        spatial_size,
+        svc,
+        y_start_stop
+        ):
+    t1 = time.time()
+
+    windows = slide_window(
+        image,
+        x_start_stop=[None, None],
+        y_start_stop=y_start_stop,
+        xy_window=(96, 96),
+        xy_overlap=(0.5, 0.5)
+        )
+
+    hot_windows = search_windows(
+        image,
+        windows,
+        svc,
+        X_scaler,
+        color_space=color_space,
+        spatial_size=spatial_size,
+        hist_bins=hist_bins,
+        orient=orient,
+        pix_per_cell=pix_per_cell,
+        cell_per_block=cell_per_block,
+        hog_channel=hog_channel,
+        spatial_feat=spatial_feat,
+        hist_feat=hist_feat,
+        hog_feat=hog_feat
+        )
+
+    window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
+    t2 = time.time()
+    print(round(t2 - t1, 2), 'Seconds to process single image...')
+    return window_img
+
+
+#### Next cell ####
+# Testining stuff out
 def from_test_images(test_images):
     cars = []
     notcars = []
@@ -571,57 +623,6 @@ def run_window_search_test(test_images, output_file_name='search_slide_test_{}.p
 
         plt.imshow(window_img)
         show_or_save(output_file_name.format(jpg_img_idx + 1))
-
-
-def process_image(
-        X_scaler,
-        cell_per_block,
-        color_space,
-        draw_image,
-        hist_bins,
-        hist_feat,
-        hog_channel,
-        hog_feat,
-        image,
-        orient,
-        pix_per_cell,
-        spatial_feat,
-        spatial_size,
-        svc,
-        y_start_stop
-        ):
-    t1 = time.time()
-
-    windows = slide_window(
-        image,
-        x_start_stop=[None, None],
-        y_start_stop=y_start_stop,
-        xy_window=(96, 96),
-        xy_overlap=(0.5, 0.5)
-        )
-
-    hot_windows = search_windows(
-        image,
-        windows,
-        svc,
-        X_scaler,
-        color_space=color_space,
-        spatial_size=spatial_size,
-        hist_bins=hist_bins,
-        orient=orient,
-        pix_per_cell=pix_per_cell,
-        cell_per_block=cell_per_block,
-        hog_channel=hog_channel,
-        spatial_feat=spatial_feat,
-        hist_feat=hist_feat,
-        hog_feat=hog_feat
-        )
-
-    window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
-    t2 = time.time()
-    print(round(t2 - t1, 2), 'Seconds to process single image...')
-    return window_img
-
 
 def train_classifier(
         extract,
