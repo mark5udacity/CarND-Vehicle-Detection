@@ -186,7 +186,7 @@ def color_hist(img, nbins=32):  # , bins_range=(0, 256)):
 # Have this function call bin_spatial() and color_hist()
 def extract_features(
         imgs,
-        color_space='YCrCb',
+        color_space='YCrCb',  # Also can be RGB, HSV, LUV, HLS, YUV, YCrCb
         spatial_size=(24, 24), # next try 32
         hist_bins=24,
         # hist_range=(0, 256),
@@ -480,21 +480,27 @@ def from_test_images(test_images):
 
     return cars, notcars
 
+def from_data_set(num_samples=None):
+    if (num_samples != None):
+        random_car_idxs = np.random.randint(0, len(cars), num_samples)
+        random_notcar_idxs = np.random.randint(0, len(notcars), num_samples)
+        sample_cars = np.array(cars)[random_car_idxs]
+        sample_notcars = np.array(notcars)[random_notcar_idxs]
+        return sample_cars, sample_notcars
+    else:
+        return cars, notcars
+
 def run_window_search_test(test_images, output_file_name='search_slide_test.png'):
     # Read in cars and notcars
-    cars, notcars = from_test_images(test_images)
-
-    # TODO: Apply to whole test data set here...
-    sample_size = 500 # No need to reduce sample size, depending on how long this takes...
-    cars = cars[0:sample_size]
-    notcars = notcars[0:sample_size]
+    cars, notcars = from_data_set(num_samples=1000)
+        #from_test_images(test_images)
 
     ### TODO: Tweak these parameters and see how the results change.
-    color_space = 'RGB'  # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
+    color_space = 'YCrCb'  # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
     orient = 9  # HOG orientations
     pix_per_cell = 8  # HOG pixels per cell
     cell_per_block = 2  # HOG cells per block
-    hog_channel = 0  # Can be 0, 1, 2, or "ALL"
+    hog_channel = ALL_HOG_CHANNELS  # Can be 0, 1, 2, or "ALL"
     spatial_size = (16, 16)  # Spatial binning dimensions
     hist_bins = 16  # Number of histogram bins
     spatial_feat = True  # Spatial features on or off
@@ -548,19 +554,19 @@ def run_window_search_test(test_images, output_file_name='search_slide_test.png'
     t = time.time()
 
     jpg_img_idx = np.random.randint(1, 7)
-    file = mpimg.imread('./test_images/test{}.jpg'.format(jpg_img_idx)) # mpimg.imread('bbox-example-image.jpg')
-    draw_image = np.copy(file)
+    image = mpimg.imread('./test_images/test{}.jpg'.format(jpg_img_idx)) # mpimg.imread('bbox-example-image.jpg')
+    draw_image = np.copy(image)
 
     # Uncomment the following line if you extracted training
     # data from .png images (scaled 0 to 1 by mpimg) and the
     # image you are searching is a .jpg (scaled 0 to 255)
-    # image = image.astype(np.float32)/255
+    image = image.astype(np.float32)/255
 
-    windows = slide_window(file, x_start_stop=[None, None], y_start_stop=y_start_stop,
+    windows = slide_window(image, x_start_stop=[None, None], y_start_stop=y_start_stop,
                            xy_window=(96, 96), xy_overlap=(0.5, 0.5))
 
     hot_windows = search_windows(
-        file,
+        image,
         windows,
         svc,
         X_scaler,
@@ -611,14 +617,16 @@ def visualize_hog(output_file_name='visualize_hog.png'):
 
 
 if platform != 'darwin':  # Mac OSX
-    print('Only meant for running from command line!  Or maybe not?')  # TODO: Verify from Jupyter if needed, think
-    # it will work...
+    print('Only meant for running from command line!  Or maybe not?')
+    # TODO: Verify from Jupyter if needed, think it will work...
 else:
     test_images = glob.glob('./test_images/*.png')
+
     run_feature_test(test_images, 'feature_test.png')
     run_sliding_windows_test(test_images)
     visualize_hog()
     run_window_search_test(test_images)
+
     del test_images
 
 print("All done testing!  How's it lookin'!?")
