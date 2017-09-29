@@ -441,9 +441,10 @@ def find_cars(
         pix_per_cell,
         cell_per_block,
         spatial_size,
-        hist_bins
+        hist_bins,
+        color_space
         ):
-    draw_img = np.copy(img)
+
     img = img.astype(np.float32) / 255
 
     img_tosearch = img[ystart:ystop, :, :]
@@ -473,6 +474,7 @@ def find_cars(
     hog2 = get_hog_features(ch2, orient, pix_per_cell, cell_per_block, feature_vec=False)
     hog3 = get_hog_features(ch3, orient, pix_per_cell, cell_per_block, feature_vec=False)
 
+    on_positive_windows = []
     for xb in range(nxsteps):
         for yb in range(nysteps):
             ypos = yb * cells_per_step
@@ -490,7 +492,7 @@ def find_cars(
             subimg = cv2.resize(ctrans_tosearch[ytop:ytop + window, xleft:xleft + window], (64, 64))
 
             # Get color features
-            spatial_features = bin_spatial(subimg, size=spatial_size)
+            spatial_features = bin_spatial(subimg, color_space=color_space, size=spatial_size)
             hist_features = color_hist(subimg, nbins=hist_bins)
 
             # Scale features and make a prediction
@@ -499,14 +501,23 @@ def find_cars(
             # test_features = X_scaler.transform(np.hstack((shape_feat, hist_feat)).reshape(1, -1))
             test_prediction = svc.predict(test_features)
 
+            #draw_img = np.copy(img)
             if test_prediction == 1:
                 xbox_left = np.int(xleft * scale)
                 ytop_draw = np.int(ytop * scale)
                 win_draw = np.int(window * scale)
-                cv2.rectangle(draw_img, (xbox_left, ytop_draw + ystart),
-                              (xbox_left + win_draw, ytop_draw + win_draw + ystart), (0, 0, 255), 6)
+                #cv2.rectangle(draw_img, (xbox_left, ytop_draw + ystart),
+                #              (xbox_left + win_draw, ytop_draw + win_draw + ystart), (0, 0, 255), 6)
+                # Calculate window position
+                startx = xbox_left #xs * nx_pix_per_step + x_start_stop[0]
+                endx = xbox_left + win_draw
+                starty = ytop_draw + ystart
+                endy = ytop_draw + win_draw + ystart
+                # Append window position to list
 
-    return draw_img
+                on_positive_windows.append(((startx, starty), (endx, endy)))
+
+    return on_positive_windows
 
 # Define a function you will pass an image
 # and the list of windows to be searched (output of slide_windows())
@@ -622,6 +633,7 @@ def process_image(
         pix_per_cell,
         spatial_feat,
         spatial_size,
+        scale = 1.5
         ):
     t1 = time.time()
 
@@ -633,9 +645,11 @@ def process_image(
         xy_overlap=(0.5, 0.5)
         )
 
-    hot_windows = search_windows(
+    hot_windows = find_cars(
         image,
-        windows,
+        y_start_stop[0],
+        y_start_stop[1],
+        scale,
         svc,
         X_scaler,
         color_space=color_space,
@@ -644,10 +658,10 @@ def process_image(
         orient=orient,
         pix_per_cell=pix_per_cell,
         cell_per_block=cell_per_block,
-        hog_channel=hog_channel,
-        spatial_feat=spatial_feat,
-        hist_feat=hist_feat,
-        hog_feat=hog_feat
+        #hog_channel=hog_channel,
+        #spatial_feat=spatial_feat,
+        #hist_feat=hist_feat,
+        #hog_feat=hog_feat
         )
 
     window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
@@ -731,8 +745,8 @@ def run_window_search_test(test_images, output_file_name='search_slide_test_{}.p
     extract = common_params(extract_features, 'Extracting features')
 
 
-    #X_scaler, svc = load_classifier()
-    X_scaler, svc = train_classifier(extract)
+    X_scaler, svc = load_classifier()
+    #X_scaler, svc = train_classifier(extract)
 
     #jpg_img_idx = np.random.randint(1, 7)
     for jpg_img_idx in range(6):
