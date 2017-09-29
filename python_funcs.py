@@ -24,6 +24,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 
+from scipy.ndimage.measurements import label
+
 # %matplotlib inline #// Jupyter Notebooks only
 
 print('Done importing everything.  System ready to rip!')
@@ -97,6 +99,8 @@ print('Printed above size of test sets, also imported cars and notcars and very 
 
 ALL_HOG_CHANNELS = 'ALL'
 
+SHOULD_TRAIN_CLASSIFIER=False # False will load saved model instead of training
+
 X_SCALER_FILE = 'X_scaler_pickle.p'
 SVC_PICKLE_FILE = 'svc_pickle.p'
 FEATURE_PICKLE_FILE = 'features_pickle.p'
@@ -166,18 +170,6 @@ def correct_for_colorspace_or_copy(image, color_space):
 
     return feature_image
 
-
-def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
-    # Make a copy of the image
-    imcopy = np.copy(img)
-    # Iterate through the bounding boxes
-    for bbox in bboxes:
-        # Draw a rectangle given bbox coordinates
-        cv2.rectangle(imcopy, bbox[0], bbox[1], color, thick)
-    # Return the image copy with boxes drawn
-    return imcopy
-
-
 def load_classifier():
     print('Loading SVC and X_Scaler')
     with open(SVC_PICKLE_FILE, "rb") as file:
@@ -206,6 +198,51 @@ else:
 
 print('Loaded all utility functions and some constants')
 
+#####  Functions for drawing  #####
+
+
+def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
+    # Make a copy of the image
+    imcopy = np.copy(img)
+    # Iterate through the bounding boxes
+    for bbox in bboxes:
+        # Draw a rectangle given bbox coordinates
+        cv2.rectangle(imcopy, bbox[0], bbox[1], color, thick)
+    # Return the image copy with boxes drawn
+    return imcopy
+
+
+def add_heat(heatmap, bbox_list):
+    # Iterate through list of bboxes
+    for box in bbox_list:
+        # Add += 1 for all pixels inside each bbox
+        # Assuming each "box" takes the form ((x1, y1), (x2, y2))
+        heatmap[box[0][1]:box[1][1], box[0][0]:box[1][0]] += 1
+
+    # Return updated heatmap
+    return heatmap  # Iterate through list of bboxes
+
+
+def apply_threshold(heatmap, threshold):
+    # Zero out pixels below the threshold
+    heatmap[heatmap <= threshold] = 0
+    # Return thresholded map
+    return heatmap
+
+def draw_labeled_bboxes(img, labels):
+    # Iterate through all detected cars
+    for car_number in range(1, labels[1] + 1):
+        # Find pixels with each car_number label value
+        nonzero = (labels[0] == car_number).nonzero()
+        # Identify x and y values of those pixels
+        nonzeroy = np.array(nonzero[0])
+        nonzerox = np.array(nonzero[1])
+        # Define a bounding box based on min/max x and y
+        bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
+        # Draw the box on the image
+        cv2.rectangle(img, bbox[0], bbox[1], (0, 0, 255), 6)
+    # Return the image
+    return img
 
 #### Next cell ####
 # Feature-specific functions
@@ -572,8 +609,7 @@ print('Loaded up sliding window functions.  Watch out for that banana peel!')
 
 def train_classifier(
         extract,
-        C=100.0, # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
-        should_save=False # will load saved model/scaler when saved is false
+        C=5.0 # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
         ):
 
     print('Training Classifier with C: {}'.format(C))
@@ -581,9 +617,6 @@ def train_classifier(
     cars, notcars = from_data_set() #num_samples=1500)
     # from_test_images(test_images)
 
-    # TODO: When done, should_save should go here, so choice is binary to train or load up.
-    # Consider: the very first time, if told to load and nothing exists, don't proceed
-    #if should_save:
     car_features = extract([cars])
     notcar_features = extract([notcars])
     X = np.vstack((car_features, notcar_features)).astype(np.float64)
@@ -608,12 +641,11 @@ def train_classifier(
     # Check the score of the SVC
     print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
 
-    if should_save:
-        print('Saving SVC and X_Scaler')
-        with open(SVC_PICKLE_FILE, "wb") as file:
-            pickle.dump(svc, file)
-        with open(X_SCALER_FILE, "wb") as file:
-            pickle.dump(X_scaler, file)
+    print('Saving SVC and X_Scaler')
+    with open(SVC_PICKLE_FILE, "wb") as file:
+        pickle.dump(svc, file)
+    with open(X_SCALER_FILE, "wb") as file:
+        pickle.dump(X_scaler, file)
 
     return X_scaler, svc
 
@@ -633,7 +665,7 @@ def process_image(
         pix_per_cell,
         spatial_feat,
         spatial_size,
-        scale = 1.5
+        scale = 1
         ):
     t1 = time.time()
 
@@ -744,9 +776,10 @@ def run_window_search_test(test_images, output_file_name='search_slide_test_{}.p
 
     extract = common_params(extract_features, 'Extracting features')
 
-
-    X_scaler, svc = load_classifier()
-    #X_scaler, svc = train_classifier(extract)
+    if SHOULD_TRAIN_CLASSIFIER:
+        X_scaler, svc = train_classifier(extract)
+    else:
+        X_scaler, svc = load_classifier()
 
     #jpg_img_idx = np.random.randint(1, 7)
     for jpg_img_idx in range(6):
@@ -797,6 +830,38 @@ def visualize_feature_extract(output_file_name, viz=False):
 # Thanks to Q&A
 #def visualize_hog(output_file_name='visualize_hog.png'):
 #    visualize_feature_extract(output_file_name=output_file_name, viz=True)
+
+def test_labeled_bbox():
+    # Read in a pickle file with bboxes saved
+    # Each item in the "all_bboxes" list will contain a
+    # list of boxes for one of the images shown above
+    box_list = pickle.load( open( "bbox_pickle.p", "rb" ))
+
+    # Read in image similar to one shown above
+    image = mpimg.imread('test_image.jpg')
+    heat = np.zeros_like(image[:, :, 0]).astype(np.float)
+
+    # Add heat to each box in box list
+    heat = add_heat(heat, box_list)
+
+    # Apply threshold to help remove false positives
+    heat = apply_threshold(heat, 1)
+
+    # Visualize the heatmap when displaying
+    heatmap = np.clip(heat, 0, 255)
+
+    # Find final boxes from heatmap using label function
+    labels = label(heatmap)
+    draw_img = draw_labeled_bboxes(np.copy(image), labels)
+
+    fig = plt.figure()
+    plt.subplot(121)
+    plt.imshow(draw_img)
+    plt.title('Car Positions')
+    plt.subplot(122)
+    plt.imshow(heatmap, cmap='hot')
+    plt.title('Heat Map')
+    fig.tight_layout()
 
 
 if platform != 'darwin':  # Mac OSX
