@@ -97,24 +97,25 @@ print('Printed above size of test sets, also imported cars and notcars and very 
 
 ALL_HOG_CHANNELS = 'ALL'
 
-X_SCALER_FILE = "X_scaler_pickle.p"
-SVC_PICKLE_FILE = "svc_pickle.p"
-
+X_SCALER_FILE = 'X_scaler_pickle.p'
+SVC_PICKLE_FILE = 'svc_pickle.p'
+FEATURE_PICKLE_FILE = 'features_pickle.p'
 
 ## THIS HAS ALL THE PARAMS TUNED
 def common_params(
         func_to_apply,
         deboog_name,
         color_space = 'YCrCb',  # Also can be RGB, HSV, LUV, HLS, YUV, YCrCb
-        spatial_size = (16, 16),
-        hist_bins = 16,
+        spatial_size = (14, 14), # results in 3,072 with 16x16, 12,288 with 64x64 and 192 for 8x8;, or x * y * 3
+        #  ^^ with minimal training, seems accuracy drops...
+        hist_bins = 32, # 16&32 results in 96, 64 in length 192
         orient = 9,
-        pix_per_cell = 8,
+        pix_per_cell = 8, # 4 results in 24,300 length feature
         cell_per_block = 2,
         hog_channel = ALL_HOG_CHANNELS,
-        spatial_feat=True,  # results in 3,072
-        hist_feat=False,  # results in 96
-        hog_feat=False,  # results in 5,292
+        spatial_feat=True,
+        hist_feat=True,
+        hog_feat=True,  # results in 5,292 with 8x2x9 (cell/block,pix/cell,orient)
         ):
 
     print('Using:', orient, 'orientations',
@@ -183,13 +184,18 @@ OUTPUT_DIR = './output_images/{}'
 
 def show_or_save(output_file_name='did_not_supply_file_name.png'):
     if platform == 'darwin':
-        print('Presuming to be on a mac, saving to file')
+        #print('Presuming to be on a mac, saving to file')
         plt.savefig(OUTPUT_DIR.format(output_file_name))
     else:
-        print('Presuming to be in Jupyter Notebook, calling show()')
+        #print('Presuming to be in Jupyter Notebook, calling show()')
         plt.show()
 
     plt.figure()
+
+if platform == 'darwin':
+    print('Presuming to be on a mac, everything will be saved to file.')
+else:
+    print('Presuming to be in Jupyter Notebook, calling show()')
 
 print('Loaded all utility functions and some constants')
 
@@ -475,7 +481,7 @@ def train_classifier(
 
     print('Training Classifier with C: {}'.format(C))
     # Read in cars and notcars
-    cars, notcars = from_data_set(num_samples=1000)
+    cars, notcars = from_data_set() #num_samples=1500)
     # from_test_images(test_images)
 
     # TODO: When done, should_save should go here, so choice is binary to train or load up.
@@ -568,17 +574,25 @@ print('Done loading the big Kahunas, process and train!')
 #### Next cell ####
 # Testing stuff out
 
-def run_feature_test(test_images, output_file_name='test_feature_{}.png'):
+def run_feature_test(test_images, output_file_name='test_feature_{}.png', use_saved_features=False):
     print('Testing out feature extraction by picking randomly from {} images'.format(len(test_images)))
 
     extract = common_params(extract_features, 'Extracting features')
-    features = extract([test_images])
+
+    if use_saved_features:
+        with open(FEATURE_PICKLE_FILE, "rb") as file:
+            features = pickle.load(file)
+    else:
+        features = extract([test_images])
+        with open(FEATURE_PICKLE_FILE, "wb") as file:
+            pickle.dump(features, file)
+
 
     if len(features) == 0:
         print('Your function only returns empty feature vectors...')
         return
 
-    #print('Feature vector length:', len(features[0]))
+    print('Feature vector length:', len(features[0]))
 
     # Create an array stack of feature vectors
     X = np.vstack(features).astype(np.float64)
