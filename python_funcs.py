@@ -72,6 +72,9 @@ print('Printed above size of test sets, also imported cars and notcars')
 
 ALL_HOG_CHANNELS = 'ALL'
 
+X_SCALER_FILE = "X_scaler_pickle.p"
+SVC_PICKLE_FILE = "svc_pickle.p"
+
 def correct_for_colorspace_or_copy(image, color_space):
     feature_image = None
     if color_space != 'RGB':
@@ -129,6 +132,15 @@ def params_for_feature_extract(
             )
 
     return call_with_input
+
+def load_classifier():
+    print('Loading SVC and X_Scaler')
+    with open(SVC_PICKLE_FILE, "rb") as file:
+        svc = pickle.load(file)
+    with open(X_SCALER_FILE, "rb") as file:
+        X_scaler = pickle.load(file)
+
+    return X_scaler, svc
 
 print('Loaded all utility functions and some constants')
 
@@ -493,9 +505,6 @@ def from_data_set(num_samples=None):
 
 def run_window_search_test(test_images, output_file_name='search_slide_test_{}.png'):
     print('Running window search test with classification')
-    # Read in cars and notcars
-    cars, notcars = from_data_set(num_samples=1000)
-        #from_test_images(test_images)
 
     ### TODO: Tweak these parameters and see how the results change.
     color_space = 'YCrCb'  # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
@@ -508,52 +517,21 @@ def run_window_search_test(test_images, output_file_name='search_slide_test_{}.p
     spatial_feat = True  # Spatial features on or off
     hist_feat = True  # Histogram features on or off
     hog_feat = True  # HOG features on or off
-    y_start_stop = [400, 650]  # Min and max in y to search in slide_window()
+    y_start_stop = [400, 670]  # Min and max in y to search in slide_window()
 
-    extract = params_for_feature_extract(
-        color_space=color_space,
-        spatial_size=spatial_size,
-        hist_bins=hist_bins,
-        orient=orient,
-        pix_per_cell=pix_per_cell,
-        cell_per_block=cell_per_block,
-        hog_channel=hog_channel,
-        spatial_feat=spatial_feat,
-        hist_feat=hist_feat,
-        hog_feat=hog_feat
+    #X_scaler, svc = load_classifier()
+    X_scaler, svc = train_classifier(
+        cell_per_block,
+        color_space,
+        hist_bins,
+        hist_feat,
+        hog_channel,
+        hog_feat,
+        orient,
+        pix_per_cell,
+        spatial_feat,
+        spatial_size
         )
-
-    car_features = extract(cars)
-    notcar_features = extract(notcars)
-
-    X = np.vstack((car_features, notcar_features)).astype(np.float64)
-    # Fit a per-column scaler
-    X_scaler = StandardScaler().fit(X)
-    # Apply the scaler to X
-    scaled_X = X_scaler.transform(X)
-
-    # Define the labels vector
-    y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
-
-    # Split up data into randomized training and test sets
-    rand_state = np.random.randint(0, 100)
-    X_train, X_test, y_train, y_test = train_test_split(
-        scaled_X, y, test_size=0.2, random_state=rand_state)
-
-    print('Using:', orient, 'orientations', pix_per_cell,
-          'pixels per cell and', cell_per_block, 'cells per block')
-    print('Feature vector length:', len(X_train[0]))
-    # Use a linear SVC
-    svc = LinearSVC()
-    # Check the training time for the SVC
-    t = time.time()
-    svc.fit(X_train, y_train)
-    t2 = time.time()
-    print(round(t2 - t, 2), 'Seconds to train SVC...')
-    # Check the score of the SVC
-    print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
-    # Check the prediction time for a single sample
-    t = time.time()
 
     #jpg_img_idx = np.random.randint(1, 7)
     for jpg_img_idx in range(6):
@@ -565,6 +543,7 @@ def run_window_search_test(test_images, output_file_name='search_slide_test_{}.p
         # image you are searching is a .jpg (scaled 0 to 255)
         image = image.astype(np.float32)/255
 
+        t1 = time.time()
         windows = slide_window(
             image,
             x_start_stop=[None, None],
@@ -591,9 +570,80 @@ def run_window_search_test(test_images, output_file_name='search_slide_test_{}.p
             )
 
         window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
+        t2 = time.time()
 
+        print(round(t2 - t1, 2), 'Seconds to process single image...')
         plt.imshow(window_img)
         show_or_save(output_file_name.format(jpg_img_idx + 1))
+
+def train_classifier(
+        cell_per_block,
+        color_space,
+        hist_bins,
+        hist_feat,
+        hog_channel,
+        hog_feat,
+        orient,
+        pix_per_cell,
+        spatial_feat,
+        spatial_size,
+        should_save=True
+        ):
+
+    # Read in cars and notcars
+    cars, notcars = from_data_set(num_samples=1000)
+    # from_test_images(test_images)
+
+    extract = params_for_feature_extract(
+        color_space=color_space,
+        spatial_size=spatial_size,
+        hist_bins=hist_bins,
+        orient=orient,
+        pix_per_cell=pix_per_cell,
+        cell_per_block=cell_per_block,
+        hog_channel=hog_channel,
+        spatial_feat=spatial_feat,
+        hist_feat=hist_feat,
+        hog_feat=hog_feat
+        )
+
+    # TODO: When done, should_save should go here, so choice is binary to train or load up.
+    # Consider: the very first time, if told to load and nothing exists, don't proceed
+    #if should_save:
+    car_features = extract(cars)
+    notcar_features = extract(notcars)
+    X = np.vstack((car_features, notcar_features)).astype(np.float64)
+    # Fit a per-column scaler
+    X_scaler = StandardScaler().fit(X)
+    # Apply the scaler to X
+    scaled_X = X_scaler.transform(X)
+    # Define the labels vector
+    y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
+    # Split up data into randomized training and test sets
+    rand_state = np.random.randint(0, 100)
+    X_train, X_test, y_train, y_test = train_test_split(
+        scaled_X, y, test_size=0.2, random_state=rand_state)
+    print('Using:', orient, 'orientations', pix_per_cell,
+          'pixels per cell and', cell_per_block, 'cells per block')
+    print('Feature vector length:', len(X_train[0]))
+    # Use a linear SVC
+    svc = LinearSVC()
+    # Check the training time for the SVC
+    t = time.time()
+    svc.fit(X_train, y_train)
+    t2 = time.time()
+    print(round(t2 - t, 2), 'Seconds to train SVC...')
+    # Check the score of the SVC
+    print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
+
+    if should_save:
+        print('Saving SVC and X_Scaler')
+        with open(SVC_PICKLE_FILE, "wb") as file:
+            pickle.dump(svc, file)
+        with open(X_SCALER_FILE, "wb") as file:
+            pickle.dump(X_scaler, file)
+
+    return X_scaler, svc
 
 
 # Thanks to Q&A
