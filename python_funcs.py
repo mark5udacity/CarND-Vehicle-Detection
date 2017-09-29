@@ -117,6 +117,7 @@ def params_for_feature_extract(
         hog_feat = True
         ):
     def call_with_input(input):
+        print('Extracting features....')
         return extract_features(
             input,
             color_space=color_space,
@@ -247,6 +248,7 @@ def hog_params(feature_image, orient, pix_per_cell, cell_per_block, feature_vec)
 
 def single_img_features(
         image,
+        # CLEANME: Instead, pass in list of features that return what to append, and then no need for all these params...
         color_space='YCrCb',
         hist_bins=16,
         hist_feat=True,
@@ -257,7 +259,7 @@ def single_img_features(
         pix_per_cell=7,
         spatial_feat=True,
         spatial_size=(16, 16),
-        viz=False
+        viz=False # CLEANME: Remove this, muddied up API and not needed here.
         ):
     img_features = []
     hog_images = []
@@ -519,19 +521,25 @@ def run_window_search_test(test_images, output_file_name='search_slide_test_{}.p
     hog_feat = True  # HOG features on or off
     y_start_stop = [400, 670]  # Min and max in y to search in slide_window()
 
-    #X_scaler, svc = load_classifier()
-    X_scaler, svc = train_classifier(
-        cell_per_block,
-        color_space,
-        hist_bins,
-        hist_feat,
-        hog_channel,
-        hog_feat,
-        orient,
-        pix_per_cell,
-        spatial_feat,
-        spatial_size
+    extract = params_for_feature_extract(
+        color_space=color_space,
+        spatial_size=spatial_size,
+        hist_bins=hist_bins,
+        orient=orient,
+        pix_per_cell=pix_per_cell,
+        cell_per_block=cell_per_block,
+        hog_channel=hog_channel,
+        spatial_feat=spatial_feat,
+        hist_feat=hist_feat,
+        hog_feat=hog_feat
         )
+
+    print('Using:', orient, 'orientations',
+          pix_per_cell, 'pixels per cell and',
+          cell_per_block, 'cells per block')
+
+    #X_scaler, svc = load_classifier()
+    X_scaler, svc = train_classifier(extract)
 
     #jpg_img_idx = np.random.randint(1, 7)
     for jpg_img_idx in range(6):
@@ -616,35 +624,15 @@ def process_image(
 
 
 def train_classifier(
-        cell_per_block,
-        color_space,
-        hist_bins,
-        hist_feat,
-        hog_channel,
-        hog_feat,
-        orient,
-        pix_per_cell,
-        spatial_feat,
-        spatial_size,
+        extract,
+        C=100.0, # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
         should_save=True
         ):
 
+    print('Training Classifier with C: {}'.format(C))
     # Read in cars and notcars
     cars, notcars = from_data_set(num_samples=1000)
     # from_test_images(test_images)
-
-    extract = params_for_feature_extract(
-        color_space=color_space,
-        spatial_size=spatial_size,
-        hist_bins=hist_bins,
-        orient=orient,
-        pix_per_cell=pix_per_cell,
-        cell_per_block=cell_per_block,
-        hog_channel=hog_channel,
-        spatial_feat=spatial_feat,
-        hist_feat=hist_feat,
-        hog_feat=hog_feat
-        )
 
     # TODO: When done, should_save should go here, so choice is binary to train or load up.
     # Consider: the very first time, if told to load and nothing exists, don't proceed
@@ -662,11 +650,9 @@ def train_classifier(
     rand_state = np.random.randint(0, 100)
     X_train, X_test, y_train, y_test = train_test_split(
         scaled_X, y, test_size=0.2, random_state=rand_state)
-    print('Using:', orient, 'orientations', pix_per_cell,
-          'pixels per cell and', cell_per_block, 'cells per block')
     print('Feature vector length:', len(X_train[0]))
     # Use a linear SVC
-    svc = LinearSVC()
+    svc = LinearSVC(C=C)
     # Check the training time for the SVC
     t = time.time()
     svc.fit(X_train, y_train)
