@@ -415,7 +415,7 @@ def show_or_save(output_file_name='did_not_supply_file_name.png'):
     plt.figure()
 
 def run_feature_test(test_images, output_file_name='test_feature.png'):
-    print('Testing out by picking randomly from {} images'.format(len(test_images)))
+    print('Testing out feature extraction by picking randomly from {} images'.format(len(test_images)))
     features = extract_features(
         test_images,
         color_space='RGB',
@@ -451,6 +451,7 @@ def run_feature_test(test_images, output_file_name='test_feature.png'):
 
 
 def run_sliding_windows_test(test_images, output_file_name='sliding_window_test.png'):
+    print('Testing out sliding windows')
     jpg_img_idx = np.random.randint(1, 7)
     image = mpimg.imread('./test_images/test{}.jpg'.format(jpg_img_idx))
 
@@ -491,6 +492,7 @@ def from_data_set(num_samples=None):
         return cars, notcars
 
 def run_window_search_test(test_images, output_file_name='search_slide_test.png'):
+    print('Running window search test with classification')
     # Read in cars and notcars
     cars, notcars = from_data_set(num_samples=1000)
         #from_test_images(test_images)
@@ -498,11 +500,11 @@ def run_window_search_test(test_images, output_file_name='search_slide_test.png'
     ### TODO: Tweak these parameters and see how the results change.
     color_space = 'YCrCb'  # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
     orient = 9  # HOG orientations
-    pix_per_cell = 8  # HOG pixels per cell
-    cell_per_block = 2  # HOG cells per block
+    pix_per_cell = 7  # HOG pixels per cell
+    cell_per_block = 3  # HOG cells per block
     hog_channel = ALL_HOG_CHANNELS  # Can be 0, 1, 2, or "ALL"
     spatial_size = (16, 16)  # Spatial binning dimensions
-    hist_bins = 16  # Number of histogram bins
+    hist_bins = 12  # Number of histogram bins
     spatial_feat = True  # Spatial features on or off
     hist_feat = True  # Histogram features on or off
     hog_feat = True  # HOG features on or off
@@ -590,6 +592,7 @@ def run_window_search_test(test_images, output_file_name='search_slide_test.png'
 
 # Thanks to Q&A
 def visualize_hog(output_file_name='visualize_hog.png'):
+    print('Visualizing hog features')
     car_ind = np.random.randint(0, len(cars))
     notcar_ind = np.random.randint(0, len(notcars))
 
@@ -625,6 +628,7 @@ else:
     run_feature_test(test_images, 'feature_test.png')
     run_sliding_windows_test(test_images)
     visualize_hog()
+    visualize_hog(output_file_name='visualize_hog2.png')
     run_window_search_test(test_images)
 
     del test_images
