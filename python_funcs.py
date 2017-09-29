@@ -476,7 +476,7 @@ print('Loaded up sliding window functions.  Watch out for that banana peel!')
 def train_classifier(
         extract,
         C=100.0, # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
-        should_save=True
+        should_save=False # will load saved model/scaler when saved is false
         ):
 
     print('Training Classifier with C: {}'.format(C))
@@ -578,14 +578,16 @@ def run_feature_test(test_images, output_file_name='test_feature_{}.png', use_sa
     print('Testing out feature extraction by picking randomly from {} images'.format(len(test_images)))
 
     extract = common_params(extract_features, 'Extracting features')
+    features = extract([test_images])
 
-    if use_saved_features:
-        with open(FEATURE_PICKLE_FILE, "rb") as file:
-            features = pickle.load(file)
-    else:
-        features = extract([test_images])
-        with open(FEATURE_PICKLE_FILE, "wb") as file:
-            pickle.dump(features, file)
+    # if use_saved_features:
+    #     with open(FEATURE_PICKLE_FILE, "rb") as file:
+    #         features = pickle.load(file)
+    # else:
+    #     extract = common_params(extract_features, 'Extracting features')
+    #     features = extract([test_images])
+    #     with open(FEATURE_PICKLE_FILE, "wb") as file:
+    #         pickle.dump(features, file)
 
 
     if len(features) == 0:
