@@ -68,7 +68,9 @@ print('Printed above size of test sets, also imported cars and notcars')
 
 
 #### Next Cell ###
-# Utility Function
+# Utility Function and constants
+
+ALL_HOG_CHANNELS = 'ALL'
 
 def correct_for_colorspace_or_copy(image, color_space):
     feature_image = None
@@ -99,30 +101,17 @@ def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
     # Return the image copy with boxes drawn
     return imcopy
 
-# Thanks to Q&A
-def visualize(fig, rows, cols, imgs, titles):
-    for i, img, in enumerate(imgs):
-        plt.subplot(rows, cols, i+1)
-        plt.title(i+1)
-        img_dims = len(img.shape)
-        if img_dims < 3:
-            plt.imshow(img, cmap='hot')
-        else:
-            plt.imshow(img)
-        plt.title(titles[1])
-
-
 def params_for_feature_extract(
-        color_space,
-        spatial_size,
-        hist_bins,
-        orient,
-        pix_per_cell,
-        cell_per_block,
-        hog_channel,
-        spatial_feat,
-        hist_feat,
-        hog_feat
+        color_space = 'YCrCb',
+        spatial_size = (16, 16),
+        hist_bins = 16,
+        orient = 9,
+        pix_per_cell = 8,
+        cell_per_block = 2,
+        hog_channel = ALL_HOG_CHANNELS,
+        spatial_feat = True,
+        hist_feat = True,
+        hog_feat = True
         ):
     def call_with_input(input):
         return extract_features(
@@ -141,7 +130,7 @@ def params_for_feature_extract(
 
     return call_with_input
 
-print('Loaded all utility functions')
+print('Loaded all utility functions and some constants')
 
 
 #### Next cell ####
@@ -154,13 +143,14 @@ def base_hog(should_visualize, img, orient, pix_per_cell, cell_per_block, featur
         cells_per_block=(cell_per_block, cell_per_block),
         transform_sqrt=False,
         visualise=should_visualize,
-        feature_vector=feature_vec
+        feature_vector=feature_vec,
+        block_norm='L1'
         )
 
 
 # Define a function to return HOG features and visualization
-def get_hog_features(img, orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True):
-    return base_hog(vis, img, orient, pix_per_cell, cell_per_block, feature_vec)
+def get_hog_features(img, orient, pix_per_cell, cell_per_block, viz=False, feature_vec=True):
+    return base_hog(viz, img, orient, pix_per_cell, cell_per_block, feature_vec)
 
 
 # Define a function to compute color histogram features
@@ -196,14 +186,14 @@ def color_hist(img, nbins=32):  # , bins_range=(0, 256)):
 # Have this function call bin_spatial() and color_hist()
 def extract_features(
         imgs,
-        color_space='RGB',
-        spatial_size=(32, 32),
-        hist_bins=32,
+        color_space='YCrCb',
+        spatial_size=(24, 24), # next try 32
+        hist_bins=24,
         # hist_range=(0, 256),
         orient=9,
-        pix_per_cell=9,
+        pix_per_cell=8,
         cell_per_block=2,
-        hog_channel=0,  # or ALL
+        hog_channel=ALL_HOG_CHANNELS,
         spatial_feat=True,
         hist_feat=True,
         hog_feat=True
@@ -229,20 +219,36 @@ def extract_features(
     return features
 
 
+def hog_params(feature_image, orient, pix_per_cell, cell_per_block, feature_vec):
+    def to_call(channel, viz):
+        return get_hog_features(
+            feature_image[:, :, channel],
+            orient=orient,
+            pix_per_cell=pix_per_cell,
+            cell_per_block=cell_per_block,
+            viz=viz,
+            feature_vec=True
+            )
+
+    return to_call
+
+
 def single_img_features(
         image,
-        color_space,
-        hist_bins,
-        hist_feat,
-        hog_channel,
-        hog_feat,
-        cell_per_block,
-        orient,
-        pix_per_cell,
-        spatial_feat,
-        spatial_size
+        color_space='YCrCb',
+        hist_bins=32,
+        hist_feat=True,
+        hog_channel=ALL_HOG_CHANNELS,
+        hog_feat=True,
+        cell_per_block=2,
+        orient=9,
+        pix_per_cell=8,
+        spatial_feat=True,
+        spatial_size=(16, 16),
+        viz=False
         ):
     img_features = []
+    hog_images = []
     feature_image = correct_for_colorspace_or_copy(image, color_space)
     ### NOTE::: Extracting features need to be done in the same order as here
     ### NOTE::: Extracting features need to be done in the same order as here
@@ -254,35 +260,37 @@ def single_img_features(
         hist_features = color_hist(feature_image, nbins=hist_bins)  # , bins_range=hist_range)
         img_features.append(hist_features)
     if hog_feat == True:
-        if hog_channel == 'ALL':
+        hog_func = hog_params(feature_image, orient, pix_per_cell, cell_per_block, feature_vec=True)
+        if hog_channel == ALL_HOG_CHANNELS:
             hog_features = []
             for channel in range(feature_image.shape[2]):
-                hog_features.append(
-                    get_hog_features(
-                        feature_image[:, :, channel],
-                        orient=orient,
-                        pix_per_cell=pix_per_cell,
-                        cell_per_block=cell_per_block,
-                        vis=False,
-                        feature_vec=True
-                        )
-                    )
+                #hoggy_feature = None
+                if viz:
+                    hoggy_feature, hog_image = hog_func(channel, viz)
+                    hog_images.append(hog_image)
+                else:
+                    hoggy_feature = hog_func(channel, viz)
+
+                hog_features.append(hoggy_feature)
+
             hog_features = np.ravel(hog_features)
+            if viz:
+                hog_images = np.vstack(hog_images)
         else:
-            hog_features = get_hog_features(
-                feature_image[:, :, hog_channel],
-                orient=orient,
-                pix_per_cell=pix_per_cell,
-                cell_per_block=cell_per_block,
-                vis=False,
-                feature_vec=True
-                )
+            if viz:
+                hog_features, hog_image = hog_func(hog_channel, viz)
+                hog_images.append(hog_image)
+            else:
+                hog_features = hog_func(hog_channel, viz)
 
         img_features.append(hog_features)
 
     # features.append(np.concatenate((spatial_features, hist_features)))
-    return np.concatenate(img_features)
-
+    result = np.concatenate(img_features)
+    if viz:
+        return result, hog_images
+    else:
+        return result
 
 print('Loaded Feature Extract Helper Functions!')
 
@@ -573,6 +581,35 @@ def run_window_search_test(test_images, output_file_name='search_slide_test.png'
     plt.imshow(window_img)
     show_or_save(output_file_name)
 
+
+# Thanks to Q&A
+def visualize_hog(output_file_name='visualize_hog.png'):
+    car_ind = np.random.randint(0, len(cars))
+    notcar_ind = np.random.randint(0, len(notcars))
+
+    car_image = mpimg.imread(cars[car_ind])
+    notcar_image = mpimg.imread(notcars[notcar_ind])
+
+    car_features, car_hog_image = single_img_features(image=car_image, viz=True)
+    notcar_features, notcar_hog_image = single_img_features(image=notcar_image, viz=True)
+
+    images = [car_image, car_hog_image, notcar_image, notcar_hog_image]
+    titles = ['Car Image', 'Car HOG', 'Not Car', 'Not Car HOG']
+    fig = plt.figure(figsize=(12,3)) #, dpi=80
+    for i, img, in enumerate(images):
+        ax = plt.subplot(1, 4, i + 1) # rows, cols, subplotidx
+        img_dims = len(img.shape)
+        if img_dims < 3:
+            ax.imshow(img, cmap='hot')
+        else:
+            ax.imshow(img)
+        ax.set_aspect('auto')
+        plt.title(titles[i])
+
+    plt.tight_layout()
+    show_or_save(output_file_name)
+
+
 if platform != 'darwin':  # Mac OSX
     print('Only meant for running from command line!  Or maybe not?')  # TODO: Verify from Jupyter if needed, think
     # it will work...
@@ -580,6 +617,7 @@ else:
     test_images = glob.glob('./test_images/*.png')
     run_feature_test(test_images, 'feature_test.png')
     run_sliding_windows_test(test_images)
+    visualize_hog()
     run_window_search_test(test_images)
     del test_images
 
