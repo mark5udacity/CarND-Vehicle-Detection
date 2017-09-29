@@ -206,7 +206,7 @@ def get_hog_features(img, orient, pix_per_cell, cell_per_block, viz=False, featu
 # Define a function to compute color histogram features
 # Pass the color_space flag as 3-letter all caps string
 # like 'HSV' or 'LUV' etc.
-def bin_spatial(img, color_space='RGB', size=(32, 32)):
+def bin_spatial(img, color_space, size=(32, 32)):
     # Convert image to new color space (if specified)
     feature_image = correct_for_colorspace_or_copy(img, color_space=color_space)
     # Use cv2.resize().ravel() to create the feature vector
@@ -216,7 +216,7 @@ def bin_spatial(img, color_space='RGB', size=(32, 32)):
 
 
 # Define a function to compute color histogram features
-def color_hist(img, nbins=32):  # , bins_range=(0, 256)):
+def color_hist(img, nbins=32):
     # Compute the histogram of the color channels separately
     channel_1_hist = np.histogram(img[:, :, 0], bins=nbins)
     channel_2_hist = np.histogram(img[:, :, 1], bins=nbins)
@@ -239,7 +239,6 @@ def extract_features(
         color_space='YCrCb',  # Also can be RGB, HSV, LUV, HLS, YUV, YCrCb
         spatial_size=(24, 24), # next try 32
         hist_bins=24,
-        # hist_range=(0, 256),
         orient=9,
         pix_per_cell=8,
         cell_per_block=2,
@@ -305,10 +304,10 @@ def single_img_features(
     ### NOTE::: Extracting features need to be done in the same order as here
     ### NOTE::: Extracting features need to be done in the same order as here
     if spatial_feat == True:
-        spatial_features = bin_spatial(feature_image, size=spatial_size)
+        spatial_features = bin_spatial(feature_image, color_space=color_space, size=spatial_size)
         img_features.append(spatial_features)
     if hist_feat == True:
-        hist_features = color_hist(feature_image, nbins=hist_bins)  # , bins_range=hist_range)
+        hist_features = color_hist(feature_image, nbins=hist_bins)
         img_features.append(hist_features)
     if hog_feat == True:
         hog_func = hog_params(feature_image, orient, pix_per_cell, cell_per_block, feature_vec=True)
@@ -410,7 +409,6 @@ def search_windows(
         color_space='RGB',
         spatial_size=(32, 32),
         hist_bins=32,
-        hist_range=(0, 256),
         orient=9,
         pix_per_cell=8,
         cell_per_block=2,
@@ -553,40 +551,48 @@ print('Done loading the big Kahunas, process and train!')
 #### Next cell ####
 # Testing stuff out
 
-def run_feature_test(test_images, output_file_name='test_feature.png'):
+def run_feature_test(test_images, output_file_name='test_feature_{}.png'):
     print('Testing out feature extraction by picking randomly from {} images'.format(len(test_images)))
+
     features = extract_features(
         test_images,
-        color_space='RGB',
+        color_space='YCrCb',
         spatial_size=(32, 32),
-        hist_bins=32
-        # , hist_range=(0, 256)
+        hist_bins=32,
+        spatial_feat=True,
+        hist_feat=False,
+        hog_feat=False
         )
 
     if len(features) == 0:
         print('Your function only returns empty feature vectors...')
-    else:
-        # Create an array stack of feature vectors
-        X = np.vstack(features).astype(np.float64)  # , notcar_features
-        # Fit a per-column scaler
-        X_scaler = StandardScaler().fit(X)
-        # Apply the scaler to X
-        scaled_X = X_scaler.transform(X)
-        features_ind = np.random.randint(0, len(features))
+        return
+
+    # Create an array stack of feature vectors
+    X = np.vstack(features).astype(np.float64)
+    # Fit a per-column scaler
+    X_scaler = StandardScaler().fit(X)
+    # Apply the scaler to X
+    scaled_X = X_scaler.transform(X)
+
+    for features_idx, tst_file in enumerate(test_images):
+        #features_ind = np.random.randint(0, len(features))
         # Plot an example of raw and scaled features
         fig = plt.figure(figsize=(12, 4))
         plt.subplot(131)
-        plt.imshow(mpimg.imread(test_images[features_ind]))
-        plt.title('Original Image')
+        plt.imshow(mpimg.imread(tst_file)) #test_images[features_ind]))
+
+        name = tst_file.split('/')[-1]
+        plt.title('Original Image: {}'.format(name))
         plt.subplot(132)
-        plt.plot(X[features_ind])
+        plt.plot(X[features_idx])
         plt.title('Raw Features')
         plt.subplot(133)
-        plt.plot(scaled_X[features_ind])
-        plt.title('Normalized Features')
+        plt.plot(scaled_X[features_idx])
+        plt.title('Normalized Features: ')
         fig.tight_layout()
 
-        show_or_save(output_file_name)
+        show_or_save(output_file_name.format(name.split('.')[0]))
 
 def run_sliding_windows_test(test_images, output_file_name='sliding_window_test.png'):
     print('Testing out sliding windows')
@@ -672,9 +678,7 @@ def run_window_search_test(test_images, output_file_name='search_slide_test_{}.p
         plt.imshow(window_img)
         show_or_save(output_file_name.format(jpg_img_idx + 1))
 
-
-# Thanks to Q&A
-def visualize_hog(output_file_name='visualize_hog.png'):
+def visualize_feature_extract(output_file_name, viz=False):
     print('Visualizing hog features')
     car_ind = np.random.randint(0, len(cars))
     notcar_ind = np.random.randint(0, len(notcars))
@@ -682,8 +686,8 @@ def visualize_hog(output_file_name='visualize_hog.png'):
     car_image = mpimg.imread(cars[car_ind])
     notcar_image = mpimg.imread(notcars[notcar_ind])
 
-    car_features, car_hog_image = single_img_features(image=car_image, viz=True)
-    notcar_features, notcar_hog_image = single_img_features(image=notcar_image, viz=True)
+    car_features, car_hog_image = single_img_features(image=car_image, viz=viz)
+    notcar_features, notcar_hog_image = single_img_features(image=notcar_image, viz=viz)
 
     images = [car_image, car_hog_image, notcar_image, notcar_hog_image]
     titles = ['Car Image', 'Car HOG', 'Not Car', 'Not Car HOG']
@@ -701,6 +705,10 @@ def visualize_hog(output_file_name='visualize_hog.png'):
     plt.tight_layout()
     show_or_save(output_file_name)
 
+# Thanks to Q&A
+def visualize_hog(output_file_name='visualize_hog.png'):
+    visualize_hog(output_file_name=output_file_name, viz=True)
+
 
 if platform != 'darwin':  # Mac OSX
     print('Only meant for running from command line!  Or maybe not?')
@@ -708,11 +716,11 @@ if platform != 'darwin':  # Mac OSX
 else:
     test_images = glob.glob('./test_images/*.png')
 
-    run_feature_test(test_images, 'feature_test.png')
-    run_sliding_windows_test(test_images)
-    visualize_hog()
-    visualize_hog(output_file_name='visualize_hog2.png')
-    run_window_search_test(test_images)
+    run_feature_test(test_images) #, 'feature_test.png')
+    #run_sliding_windows_test(test_images)
+    #visualize_hog()
+    #visualize_hog(output_file_name='visualize_hog2.png')
+    #run_window_search_test(test_images)
 
     del test_images
 
