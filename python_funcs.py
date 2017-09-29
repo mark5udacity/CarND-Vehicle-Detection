@@ -64,7 +64,32 @@ image_types = os.listdir(basedir)
 notcars = process_image_types(image_types, 'notcars.txt', 'Non-Vehicle')
 
 del basedir, image_types
-print('Printed above size of test sets, also imported cars and notcars')
+
+def from_test_images(test_images):
+    cars = []
+    notcars = []
+
+    for file_name in test_images:
+        if 'extra' in file_name \
+                or ('image' in file_name.split('/')[-1] and '00' not in file_name):
+            notcars.append(file_name)
+        else:
+            cars.append(file_name)
+
+    return cars, notcars
+
+def from_data_set(num_samples=None):
+    if (num_samples != None):
+        random_car_idxs = np.random.randint(0, len(cars), num_samples)
+        random_notcar_idxs = np.random.randint(0, len(notcars), num_samples)
+        sample_cars = np.array(cars)[random_car_idxs]
+        sample_notcars = np.array(notcars)[random_notcar_idxs]
+        return sample_cars, sample_notcars
+    else:
+        return cars, notcars
+
+
+print('Printed above size of test sets, also imported cars and notcars and very useful helper functions to load')
 
 
 #### Next Cell ###
@@ -424,63 +449,55 @@ def search_windows(
 
 print('Loaded up sliding window functions.  Watch out for that banana peel!')
 
-#### Next cell ####
-
-def run_feature_test(test_images, output_file_name='test_feature.png'):
-    print('Testing out feature extraction by picking randomly from {} images'.format(len(test_images)))
-    features = extract_features(
-        test_images,
-        color_space='RGB',
-        spatial_size=(32, 32),
-        hist_bins=32
-        # , hist_range=(0, 256)
-        )
-
-    if len(features) == 0:
-        print('Your function only returns empty feature vectors...')
-    else:
-        # Create an array stack of feature vectors
-        X = np.vstack(features).astype(np.float64)  # , notcar_features
-        # Fit a per-column scaler
-        X_scaler = StandardScaler().fit(X)
-        # Apply the scaler to X
-        scaled_X = X_scaler.transform(X)
-        features_ind = np.random.randint(0, len(features))
-        # Plot an example of raw and scaled features
-        fig = plt.figure(figsize=(12, 4))
-        plt.subplot(131)
-        plt.imshow(mpimg.imread(test_images[features_ind]))
-        plt.title('Original Image')
-        plt.subplot(132)
-        plt.plot(X[features_ind])
-        plt.title('Raw Features')
-        plt.subplot(133)
-        plt.plot(scaled_X[features_ind])
-        plt.title('Normalized Features')
-        fig.tight_layout()
-
-        show_or_save(output_file_name)
-
-
-def run_sliding_windows_test(test_images, output_file_name='sliding_window_test.png'):
-    print('Testing out sliding windows')
-    jpg_img_idx = np.random.randint(1, 7)
-    image = mpimg.imread('./test_images/test{}.jpg'.format(jpg_img_idx))
-
-    windows = slide_window(
-        image,
-        x_start_stop=[None, None],
-        y_start_stop=[None, None],
-        xy_window=(128, 128),
-        xy_overlap=(0.5, 0.5)
-        )
-
-    window_img = draw_boxes(image, windows, color=(155, 55, 255), thick=6)
-    plt.imshow(window_img)
-    show_or_save(output_file_name)
-
 ##### Next Cell ####
-# The pipeline, bringing it all together!
+# The training and the pipeline, bringing it all together in the big kahuna!
+
+def train_classifier(
+        extract,
+        C=100.0, # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
+        should_save=True
+        ):
+
+    print('Training Classifier with C: {}'.format(C))
+    # Read in cars and notcars
+    cars, notcars = from_data_set(num_samples=1000)
+    # from_test_images(test_images)
+
+    # TODO: When done, should_save should go here, so choice is binary to train or load up.
+    # Consider: the very first time, if told to load and nothing exists, don't proceed
+    #if should_save:
+    car_features = extract(cars)
+    notcar_features = extract(notcars)
+    X = np.vstack((car_features, notcar_features)).astype(np.float64)
+    # Fit a per-column scaler
+    X_scaler = StandardScaler().fit(X)
+    # Apply the scaler to X
+    scaled_X = X_scaler.transform(X)
+    # Define the labels vector
+    y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
+    # Split up data into randomized training and test sets
+    rand_state = np.random.randint(0, 100)
+    X_train, X_test, y_train, y_test = train_test_split(
+        scaled_X, y, test_size=0.2, random_state=rand_state)
+    print('Feature vector length:', len(X_train[0]))
+    # Use a linear SVC
+    svc = LinearSVC(C=C)
+    # Check the training time for the SVC
+    t = time.time()
+    svc.fit(X_train, y_train)
+    t2 = time.time()
+    print(round(t2 - t, 2), 'Seconds to train SVC...')
+    # Check the score of the SVC
+    print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
+
+    if should_save:
+        print('Saving SVC and X_Scaler')
+        with open(SVC_PICKLE_FILE, "wb") as file:
+            pickle.dump(svc, file)
+        with open(X_SCALER_FILE, "wb") as file:
+            pickle.dump(X_scaler, file)
+
+    return X_scaler, svc
 
 def process_image(
         X_scaler,
@@ -531,31 +548,62 @@ def process_image(
     print(round(t2 - t1, 2), 'Seconds to process single image...')
     return window_img
 
+print('Done loading the big Kahunas, process and train!')
 
 #### Next cell ####
-# Testining stuff out
-def from_test_images(test_images):
-    cars = []
-    notcars = []
+# Testing stuff out
 
-    for file_name in test_images:
-        if 'extra' in file_name \
-                or ('image' in file_name.split('/')[-1] and '00' not in file_name):
-            notcars.append(file_name)
-        else:
-            cars.append(file_name)
+def run_feature_test(test_images, output_file_name='test_feature.png'):
+    print('Testing out feature extraction by picking randomly from {} images'.format(len(test_images)))
+    features = extract_features(
+        test_images,
+        color_space='RGB',
+        spatial_size=(32, 32),
+        hist_bins=32
+        # , hist_range=(0, 256)
+        )
 
-    return cars, notcars
-
-def from_data_set(num_samples=None):
-    if (num_samples != None):
-        random_car_idxs = np.random.randint(0, len(cars), num_samples)
-        random_notcar_idxs = np.random.randint(0, len(notcars), num_samples)
-        sample_cars = np.array(cars)[random_car_idxs]
-        sample_notcars = np.array(notcars)[random_notcar_idxs]
-        return sample_cars, sample_notcars
+    if len(features) == 0:
+        print('Your function only returns empty feature vectors...')
     else:
-        return cars, notcars
+        # Create an array stack of feature vectors
+        X = np.vstack(features).astype(np.float64)  # , notcar_features
+        # Fit a per-column scaler
+        X_scaler = StandardScaler().fit(X)
+        # Apply the scaler to X
+        scaled_X = X_scaler.transform(X)
+        features_ind = np.random.randint(0, len(features))
+        # Plot an example of raw and scaled features
+        fig = plt.figure(figsize=(12, 4))
+        plt.subplot(131)
+        plt.imshow(mpimg.imread(test_images[features_ind]))
+        plt.title('Original Image')
+        plt.subplot(132)
+        plt.plot(X[features_ind])
+        plt.title('Raw Features')
+        plt.subplot(133)
+        plt.plot(scaled_X[features_ind])
+        plt.title('Normalized Features')
+        fig.tight_layout()
+
+        show_or_save(output_file_name)
+
+def run_sliding_windows_test(test_images, output_file_name='sliding_window_test.png'):
+    print('Testing out sliding windows')
+    jpg_img_idx = np.random.randint(1, 7)
+    image = mpimg.imread('./test_images/test{}.jpg'.format(jpg_img_idx))
+
+    windows = slide_window(
+        image,
+        x_start_stop=[None, None],
+        y_start_stop=[None, None],
+        xy_window=(128, 128),
+        xy_overlap=(0.5, 0.5)
+        )
+
+    window_img = draw_boxes(image, windows, color=(155, 55, 255), thick=6)
+    plt.imshow(window_img)
+    show_or_save(output_file_name)
 
 def run_window_search_test(test_images, output_file_name='search_slide_test_{}.png'):
     print('Running window search test with classification')
@@ -623,53 +671,6 @@ def run_window_search_test(test_images, output_file_name='search_slide_test_{}.p
 
         plt.imshow(window_img)
         show_or_save(output_file_name.format(jpg_img_idx + 1))
-
-def train_classifier(
-        extract,
-        C=100.0, # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
-        should_save=True
-        ):
-
-    print('Training Classifier with C: {}'.format(C))
-    # Read in cars and notcars
-    cars, notcars = from_data_set(num_samples=1000)
-    # from_test_images(test_images)
-
-    # TODO: When done, should_save should go here, so choice is binary to train or load up.
-    # Consider: the very first time, if told to load and nothing exists, don't proceed
-    #if should_save:
-    car_features = extract(cars)
-    notcar_features = extract(notcars)
-    X = np.vstack((car_features, notcar_features)).astype(np.float64)
-    # Fit a per-column scaler
-    X_scaler = StandardScaler().fit(X)
-    # Apply the scaler to X
-    scaled_X = X_scaler.transform(X)
-    # Define the labels vector
-    y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
-    # Split up data into randomized training and test sets
-    rand_state = np.random.randint(0, 100)
-    X_train, X_test, y_train, y_test = train_test_split(
-        scaled_X, y, test_size=0.2, random_state=rand_state)
-    print('Feature vector length:', len(X_train[0]))
-    # Use a linear SVC
-    svc = LinearSVC(C=C)
-    # Check the training time for the SVC
-    t = time.time()
-    svc.fit(X_train, y_train)
-    t2 = time.time()
-    print(round(t2 - t, 2), 'Seconds to train SVC...')
-    # Check the score of the SVC
-    print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
-
-    if should_save:
-        print('Saving SVC and X_Scaler')
-        with open(SVC_PICKLE_FILE, "wb") as file:
-            pickle.dump(svc, file)
-        with open(X_SCALER_FILE, "wb") as file:
-            pickle.dump(X_scaler, file)
-
-    return X_scaler, svc
 
 
 # Thanks to Q&A
