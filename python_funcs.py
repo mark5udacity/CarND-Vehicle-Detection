@@ -179,7 +179,7 @@ print('Printed above size of test sets, also imported cars and notcars and very 
 ALL_HOG_CHANNELS = 'ALL'
 
 SHOULD_TRAIN_CLASSIFIER=True # False will load saved model instead of training
-SHOULD_RECOMPUTE_FEATURES=True # False will load saved model instead of extracting features from training set
+SHOULD_RECOMPUTE_FEATURES=False # False will load saved model instead of extracting features from training set
 
 X_SCALER_FILE = 'X_scaler_pickle.p'
 SVC_PICKLE_FILE = 'svc_pickle.p'
@@ -190,7 +190,8 @@ def common_params(
         func_to_apply,
         deboog_name,
         color_space = 'YCrCb',  # Also can be RGB, HSV, LUV, HLS, YUV, YCrCb
-        spatial_size = (14, 14), # results in 3,072 with 16x16, 12,288 with 64x64 and 192 for 8x8;, or x * y * 3
+        spatial_size = (32, 32), # results in 3,072 with 16x16, 12,288 with 64x64 and 192 for 8x8;, or x * y * 3
+        # (32, 32) is porbs best for sptial...
         #  ^^ with minimal training, seems accuracy drops...
         hist_bins = 32, # 16&32 results in 96, 64 in length 192
         orient = 9,
@@ -378,8 +379,8 @@ def color_hist(img, nbins=32):
 def extract_features(
         imgs,
         color_space,
-        spatial_size=(24, 24), # next try 32
-        hist_bins=24,
+        spatial_size=(32, 32), # next try 32
+        hist_bins=32,
         orient=9,
         pix_per_cell=8,
         cell_per_block=2,
@@ -393,10 +394,10 @@ def extract_features(
     t1 = time.time()
     for file in imgs:
         if idx % 1000 == 0:
-            print(round(time.time() - t1, 2), 'Seconds to extract all the features from 250 things...')
+            print(round(time.time() - t1, 2), 'Seconds to extract all the features from 1000 things...')
             t1 = time.time()
         image = mpimg.imread(file)
-        img_features = single_img_features(
+        img_features = mcv_init_single_img_features(
             image,
             color_space,
             hist_bins,
@@ -431,7 +432,7 @@ def hog_params(feature_image, orient, pix_per_cell, cell_per_block, feature_vec)
     return to_call
 
 
-def single_img_features(
+def mcv_init_single_img_features(
         image,
         # CLEANME: Instead, pass in list of features that return what to append, and then no need for all these params...
         color_space,
@@ -670,8 +671,8 @@ def search_windows(
     on_positive_windows = []
     for window in windows:
         test_img = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]], (64, 64))
-        # 4) Extract features for that window using single_img_features()
-        features = single_img_features(
+        # 4) Extract features for that window using mcv_init_single_img_features()
+        features = mcv_init_single_img_features(
             image=test_img,
             color_space=color_space,
             spatial_size=spatial_size,
@@ -701,7 +702,7 @@ print('Loaded up sliding window functions.  Watch out for that banana peel!')
 
 def train_classifier(
         extract,
-        C=500.0, # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
+        C=1.0, # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
         ):
 
     if SHOULD_RECOMPUTE_FEATURES:
@@ -848,7 +849,7 @@ def process_movie_image(img, debug=False):
 
     scale = 1.0
     color_space = 'YCrCb'  # Also can be RGB, HSV, LUV, HLS, YUV, YCrCb
-    spatial_size = (14, 14)  # results in 3,072 with 16x16, 12,288 with 64x64 and 192 for 8x8;, or x * y * 3
+    spatial_size = (32, 32)  # results in 3,072 with 16x16, 12,288 with 64x64 and 192 for 8x8;, or x * y * 3
     #  ^^ with minimal training, seems accuracy drops...
     hist_bins = 32  # 16&32 results in 96, 64 in length 192
     orient = 9
@@ -882,9 +883,11 @@ def process_movie_image(img, debug=False):
     # Apply threshold to alp remove false positives
     heat = apply_threshold(heat, 0.78)
     # Visualize the heatmap when displaying
-    heatmap = np.clip(heat, 0, 255)
+    #heatmap = np.clip(heat, 0, 255)
+
+    vehicle_history.append(heat)
     # Find final boxes from heatmap using label function
-    labels = label(vehicle_history)
+    labels = label(heat)
     draw_img = draw_labeled_bboxes(np.copy(img), labels)
 
     if debug:
@@ -894,12 +897,13 @@ def process_movie_image(img, debug=False):
 
 def process_movie():
     fileName = 'project_video.mp4'
+    # 'test_video.mp4'
     # 'IMG_7462.mp4'
     # 'solidWhiteRight.mp4'
     # 'solidYellowLeft.mp4'
 
     test_output = 'output/' + fileName
-    clip1 = VideoFileClip(fileName).subclip(27,32)
+    clip1 = VideoFileClip(fileName)#.subclip(27,32)
     t1 = time.time()
     output_clip = clip1.fl_image(process_movie_image)
     t2 = time.time()
@@ -1014,7 +1018,7 @@ def visualize_feature_extract(output_file_name, viz=False):
     car_image = mpimg.imread(cars[car_ind])
     notcar_image = mpimg.imread(notcars[notcar_ind])
 
-    extract_img_feature = common_params(single_img_features)
+    extract_img_feature = common_params(mcv_init_single_img_features)
 
     car_features, car_hog_image = extract_img_feature(image=car_image, viz=viz) ##blech...
     notcar_features, notcar_hog_image = extract_img_feature(image=notcar_image, viz=viz)
@@ -1095,7 +1099,7 @@ else:
 
 
     test_process_movie_image()
-    #process_movie()
+    process_movie()
 
 
 print("All done testing!  How's it lookin'!?")

@@ -34,7 +34,17 @@ You're reading it!
 
 ###Histogram of Oriented Gradients (HOG)
 
+####0. Initial setup
+I recently discovered the super-happy-puppy-baby-monkey awesome PyCharm is indeed a rather pleasant experience for coding as it is for Java and Javascript with IntelliJ.  My initial idea was to write everything in a Python script, using refactorings that I'm used to in Java to split up the functions across files/etc sanely, and then transfer it over to a Jupyter Notebook. 
+ 
+ For one, I have ran out of time to transfer to Jupyter, but at least some of that basic structure is still there (with the ##### Next Cell  ## designations).  Taking lessons learned from prior Jupyter notebooks, I took pains to ensure local variables don't leak, deleting them manually as necessary.   
+
+  Unfortunately, I took this cause of avoiding global vars too far and created functions-of-functions to encapsulate my variables.  Really enjoyed to have discovered Python does structuring similar to Javacript, however, not as clean of a syntax.  I should have just had all the parameters as a constants object that can be passw round
 ####1. Explain how (and identify where in your code) you extracted HOG features from the training images.
+Since my code is really in flux still, I'll try to avid using line-numbers.  I renamed the single_img_features method frm the lecture videos as that was the initial place I had HOG feature extraction (and spatial binning) working.  However, upon following the lecture notes, I proceeded to use the extract HOG-once trick, even though I noticed a small degredation on the smaller subset of images I tested against.
+  
+  I renamed the original hog feature to be mcv_init_single_img_features, searching for that will bring you to what you seek. 
+  A method called process_movie_image contains the approach used in the video, 
 
 The code for this step is contained in the first code cell of the IPython notebook (or in lines # through # of the file called `some_file.py`).  
 
@@ -102,5 +112,7 @@ Here's an example result showing the heatmap from a series of frames of video, t
 
 ####1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
 
-Here I'll talk about the approach I took, what techniques I used, what worked and why, where the pipeline might fail and how I might improve it if I were going to pursue this project further.  
+My preferred idea to improve performance is to add a RandomForestClassifier, and something like XGBoost or whatever it is is the cool cats use these days, and then use an ensemble of them.  When I briefly tried to use purely RandomForestClassifier, absolutely nothing seemed to have come out of it.  
+I also completely ran out of memory when trying to increase the training set size to the full 70,000 provided by the Udacity CrowdAI project.  Can spend more time improving on that. 
+
 
