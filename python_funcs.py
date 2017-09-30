@@ -618,7 +618,7 @@ print('Loaded up sliding window functions.  Watch out for that banana peel!')
 
 def train_classifier(
         extract,
-        C=5.0, # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
+        C=500.0, # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
         ):
 
     if SHOULD_RECOMPUTE_FEATURES:
@@ -746,6 +746,76 @@ def process_image(
     return window_img
 
 print('Done loading the big Kahunas, process and train!')
+
+
+#### Next cell #####
+X_scaler, svc = load_classifier()
+
+def process_movie_image(img, debug=False):
+
+    scale = 1.0
+    color_space = 'YCrCb'  # Also can be RGB, HSV, LUV, HLS, YUV, YCrCb
+    spatial_size = (14, 14)  # results in 3,072 with 16x16, 12,288 with 64x64 and 192 for 8x8;, or x * y * 3
+    #  ^^ with minimal training, seems accuracy drops...
+    hist_bins = 32  # 16&32 results in 96, 64 in length 192
+    orient = 9
+    pix_per_cell = 8  # 4 results in 24,300 length feature
+    cell_per_block = 2
+    hog_channel = ALL_HOG_CHANNELS
+    spatial_feat = True
+    hist_feat = True
+    hog_feat = True  # results in 5,292 with 8x2x9 (cell/block,pix/cell,orient)
+    y_start_stop = [400, 670]  # Min and max in y to search in slide_window()
+
+    hot_windows, heat = find_cars(
+        img,
+        y_start_stop[0],
+        y_start_stop[1],
+        scale,
+        svc,
+        X_scaler,
+        color_space=color_space,
+        spatial_size=spatial_size,
+        hist_bins=hist_bins,
+        orient=orient,
+        pix_per_cell=pix_per_cell,
+        cell_per_block=cell_per_block,
+        # hog_channel=hog_channel,
+        # spatial_feat=spatial_feat,
+        # hist_feat=hist_feat,
+        # hog_feat=hog_feat
+        )
+
+    # Apply threshold to alp remove false positives
+    heat = apply_threshold(heat, 0.72)
+
+    # Find final boxes from heatmap using label function
+    labels = label(heat)
+    draw_img = draw_labeled_bboxes(np.copy(img), labels)
+
+    if debug:
+        return draw_img, heat
+
+    return draw_img
+
+def process_movie():
+    fileName = 'project_video.mp4'
+    # 'IMG_7462.mp4'
+    # 'solidWhiteRight.mp4'
+    # 'solidYellowLeft.mp4'
+
+    test_output = 'output/' + fileName
+    clip1 = VideoFileClip(fileName).subclip(27,32)
+    t1 = time.time()
+    output_clip = clip1.fl_image(process_movie_image)
+    t2 = time.time()
+    print(round(t2 - t1, 2), ' seconds to process movie.')
+
+    output_clip.write_videofile(test_output, audio=False)
+
+#del X_scaler, svc
+print('Done loading the movie processing!')
+
 
 #### Next cell ####
 # Testing stuff out
@@ -875,62 +945,19 @@ def visualize_feature_extract(output_file_name, viz=False):
 #def visualize_hog(output_file_name='visualize_hog.png'):
 #    visualize_feature_extract(output_file_name=output_file_name, viz=True)
 
-def test_labeled_bbox(output_file_name='labeled_bbox_{}.png'):
+def test_process_movie_image(output_file_name='labeled_bbox_{}.png'):
     # Read in a pickle file with bboxes saved
     # Each item in the "all_bboxes" list will contain a
     # list of boxes for one of the images shown above
     #box_list = pickle.load( open( "bbox_pickle.p", "rb" ))
 
-    X_scaler, svc = load_classifier()
+    #X_scaler, svc = load_classifier()
 
     # Read in image similar to one shown above
     for jpg_img_idx in range(6):
         image = mpimg.imread('./test_images/test{}.jpg'.format(jpg_img_idx + 1))
 
-        #heat = np.zeros_like(image[:, :, 0]).astype(np.float)
-
-        # Add heat to each box in box list
-        #heat = add_heat(heat, box_list)
-
-        scale = 1.0
-        color_space = 'YCrCb'  # Also can be RGB, HSV, LUV, HLS, YUV, YCrCb
-        spatial_size = (14, 14) # results in 3,072 with 16x16, 12,288 with 64x64 and 192 for 8x8;, or x * y * 3
-        #  ^^ with minimal training, seems accuracy drops...
-        hist_bins = 32 # 16&32 results in 96, 64 in length 192
-        orient = 9
-        pix_per_cell = 8 # 4 results in 24,300 length feature
-        cell_per_block = 2
-        hog_channel = ALL_HOG_CHANNELS
-        spatial_feat=True
-        hist_feat=True
-        hog_feat=True  # results in 5,292 with 8x2x9 (cell/block,pix/cell,orient)
-        y_start_stop = [400, 670]  # Min and max in y to search in slide_window()
-
-        hot_windows, heat = find_cars(
-            image,
-            y_start_stop[0],
-            y_start_stop[1],
-            scale,
-            svc,
-            X_scaler,
-            color_space=color_space,
-            spatial_size=spatial_size,
-            hist_bins=hist_bins,
-            orient=orient,
-            pix_per_cell=pix_per_cell,
-            cell_per_block=cell_per_block,
-            # hog_channel=hog_channel,
-            # spatial_feat=spatial_feat,
-            # hist_feat=hist_feat,
-            # hog_feat=hog_feat
-            )
-
-        # Apply threshold to help remove false positives
-        heat = apply_threshold(heat, 1)
-
-
-        # Visualize the heatmap when displaying
-        #heatmap = np.clip(heat, 0, 255)
+        draw, heat = process_movie_image(image, debug=True)
 
         # Find final boxes from heatmap using label function
         labels = label(heat)
@@ -951,18 +978,21 @@ if platform != 'darwin':  # Mac OSX
     print('Only meant for running from command line!  Or maybe not?')
     # TODO: Verify from Jupyter if needed, think it will work...
 else:
-    test_images = glob.glob('./test_images/*.png')
+    #test_images = glob.glob('./test_images/*.png')
 
     # run_feature_test(test_images) #, 'feature_test.png')
     # run_sliding_windows_test(test_images)
     #visualize_hog()
     #visualize_hog(output_file_name='visualize_hog2.png')
     #run_window_search_test(test_images)
+    #del test_images
 
-    test_labeled_bbox()
 
-    del test_images
+    #test_process_movie_image()
+    process_movie()
+
 
 print("All done testing!  How's it lookin'!?")
 
-#### Next cell ###
+
+#### Next cell #####
