@@ -1,3 +1,5 @@
+import csv
+
 import cv2
 import glob
 import pickle
@@ -19,7 +21,7 @@ import numpy as np
 from sys import platform
 
 import os
-
+import matplotlib.patches as patches
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
@@ -38,6 +40,10 @@ print('Done importing everything.  System ready to rip!')
 # Initial importing of data.
 
 def process_base_image_dir(basedir):
+    if not os.path.isdir(basedir):
+        raise BaseException(basedir, 'folder not found! Please see ./data/README.md for downloading links and expected structure of data')
+
+
     # Different folders are different sources for images, GTI, KITTI, etc
     img_types = os.listdir(basedir)
     if platform == 'darwin':  # Mac OSX
@@ -53,9 +59,9 @@ def process_image_types(image_types, file_name, type_name):
     for imtype in image_types:
         images.extend(glob.glob("{}/{}/*".format(basedir, imtype)))
     print('Number of {} Images found: {}'.format(type_name, len(images)))
-    with open(file_name, 'w') as f:
-        for fn in images:
-            f.write('{}{}'.format(fn, os.linesep))
+    #with open(file_name, 'w') as f:
+    #    for fn in images:
+     #       f.write('{}{}'.format(fn, os.linesep))
 
     return images
 
@@ -63,10 +69,64 @@ def process_image_types(image_types, file_name, type_name):
 basedir = './data/vehicles'
 image_types = process_base_image_dir(basedir)
 cars = process_image_types(image_types, 'cars.txt', 'Vehicle')
+#print('cars sample shape is: {}'.format(cars[0].shape))
 
 basedir = './data/non-vehicles'
 image_types = os.listdir(basedir)
 notcars = process_image_types(image_types, 'notcars.txt', 'Non-Vehicle')
+#print('noncars sample shape is: {}'.format(notcars[0].shape))
+
+basedir = './data/object-detection-crowdai'
+
+def load_crowd_ai():
+    if not os.path.isdir(basedir):
+        raise BaseException(basedir, 'folder not found! Please see ./data/README.md for downloading links and expected structure of data')
+
+    IMG_IDX = 4
+    LABEL_IDX = 5
+
+    count = 1
+    with open('{}/labels.csv'.format(basedir)) as csvfile:
+        before_cars_len = len(cars)
+        before_notcars_len = len(notcars)
+
+        reader = csv.reader(csvfile)
+        next(reader, None) # skip header
+
+        cur_frame = None
+        cur_frame_img = None
+        for line in reader:
+            if line[IMG_IDX] != cur_frame:
+                cur_frame = line[IMG_IDX]
+                input_file = '{}/{}'.format(basedir, cur_frame)
+                cur_frame_img = mpimg.imread(input_file)
+
+            x1 = int(line[0])
+            x2 = int(line[1])
+            y1 =int(line[2])
+            y2 = int(line[3])
+            cropped = cur_frame_img[min(x1, x2) : max(x1, x2), min(y1, y2) : max(y1, y2)]
+            #print('Cropped size (pre-resizing): {}'.format(cropped.shape))
+            cropped = cv2.resize(cropped, (64, 64))
+
+            if line[LABEL_IDX] == 'Car':
+                outfile_name = '{}/{}/img_{}.png'.format(basedir, 'cars', count)
+                cars.append(outfile_name)
+            else:
+                outfile_name = '{}/{}/img_{}.png'.format(basedir, 'notcars', count)
+                notcars.append(outfile_name)
+
+            if not os.path.isfile(outfile_name):
+                plt.imshow(cropped)
+                plt.axis('off')
+                plt.savefig(outfile_name, bbox_inches='tight')
+
+            count += 1
+
+        print('Added {} cars from Udacity CrowdAI annotated set'.format(len(cars) - before_cars_len))
+        print('Added {} notcars'.format(len(notcars) - before_notcars_len))
+
+load_crowd_ai()
 
 del basedir, image_types
 
@@ -185,6 +245,16 @@ def load_classifier():
 
 OUTPUT_DIR = './output_images/{}'
 
+if platform == 'darwin':
+    print('Presuming to be on a mac, everything will be saved to file.')
+else:
+    print('Presuming to be in Jupyter Notebook, calling show()')
+
+print('Loaded all utility functions and some constants')
+
+#### Next Cell ####
+#####  Functions for drawing and other image manipulation #####
+
 def show_or_save(output_file_name='did_not_supply_file_name.png'):
     if platform == 'darwin':
         #print('Presuming to be on a mac, saving to file')
@@ -194,16 +264,6 @@ def show_or_save(output_file_name='did_not_supply_file_name.png'):
         plt.show()
 
     plt.figure()
-
-if platform == 'darwin':
-    print('Presuming to be on a mac, everything will be saved to file.')
-else:
-    print('Presuming to be in Jupyter Notebook, calling show()')
-
-print('Loaded all utility functions and some constants')
-
-#####  Functions for drawing  #####
-
 
 def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
     # Make a copy of the image
@@ -749,7 +809,10 @@ print('Done loading the big Kahunas, process and train!')
 
 
 #### Next cell #####
+## Movie time1
+
 X_scaler, svc = load_classifier()
+
 
 def process_movie_image(img, debug=False):
 
@@ -977,7 +1040,7 @@ def test_process_movie_image(output_file_name='labeled_bbox_{}.png'):
 if platform != 'darwin':  # Mac OSX
     print('Only meant for running from command line!  Or maybe not?')
     # TODO: Verify from Jupyter if needed, think it will work...
-else:
+#else:
     #test_images = glob.glob('./test_images/*.png')
 
     # run_feature_test(test_images) #, 'feature_test.png')
@@ -989,7 +1052,7 @@ else:
 
 
     #test_process_movie_image()
-    process_movie()
+    #process_movie()
 
 
 print("All done testing!  How's it lookin'!?")
