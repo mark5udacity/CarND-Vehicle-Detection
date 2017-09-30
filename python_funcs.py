@@ -667,6 +667,7 @@ def train_classifier(
 
     # Use a linear SVC
     svc = LinearSVC(C=C)
+    ##svc = XGBClassifier() ### TODO: WANT TO TRY...but need to install...no time
     #svc = RandomForestClassifier(n_estimators=100)
 
     # Check the training time for the SVC
