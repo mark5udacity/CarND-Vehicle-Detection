@@ -99,14 +99,18 @@ def load_crowd_ai():
             if line[IMG_IDX] != cur_frame:
                 cur_frame = line[IMG_IDX]
                 input_file = '{}/{}'.format(basedir, cur_frame)
-                cur_frame_img = mpimg.imread(input_file)
+                cur_frame_img = cv2.imread(input_file)#.transpose(0,1)
+                #print(cur_frame_img.shape, 'loaded image')
 
-            x1 = int(line[0])
-            x2 = int(line[1])
-            y1 =int(line[2])
-            y2 = int(line[3])
-            cropped = cur_frame_img[min(x1, x2) : max(x1, x2), min(y1, y2) : max(y1, y2)]
+            xmin = int(line[0])
+            ymin = int(line[1])
+            xmax = int(line[2])
+            ymax = int(line[3])
+            #print((xmin, xmax), (ymin, ymax))
+            cropped = cur_frame_img[ymin:ymax, xmin:xmax]
             #print('Cropped size (pre-resizing): {}'.format(cropped.shape))
+            #if not all(cropped.shape):
+            #    continue
             cropped = cv2.resize(cropped, (64, 64))
 
             if line[LABEL_IDX] == 'Car':
@@ -158,12 +162,12 @@ print('Printed above size of test sets, also imported cars and notcars and very 
 
 
 #### Next Cell ###
-# Utility Function and constants
+# Utility Function
 
 ALL_HOG_CHANNELS = 'ALL'
 
 SHOULD_TRAIN_CLASSIFIER=True # False will load saved model instead of training
-SHOULD_RECOMPUTE_FEATURES=False # False will load saved model instead of extracting features from training set
+SHOULD_RECOMPUTE_FEATURES=True # False will load saved model instead of extracting features from training set
 
 X_SCALER_FILE = 'X_scaler_pickle.p'
 SVC_PICKLE_FILE = 'svc_pickle.p'
@@ -1040,18 +1044,18 @@ def test_process_movie_image(output_file_name='labeled_bbox_{}.png'):
 if platform != 'darwin':  # Mac OSX
     print('Only meant for running from command line!  Or maybe not?')
     # TODO: Verify from Jupyter if needed, think it will work...
-#else:
-    #test_images = glob.glob('./test_images/*.png')
+else:
+    test_images = glob.glob('./test_images/*.png')
 
     # run_feature_test(test_images) #, 'feature_test.png')
     # run_sliding_windows_test(test_images)
     #visualize_hog()
     #visualize_hog(output_file_name='visualize_hog2.png')
-    #run_window_search_test(test_images)
-    #del test_images
+    run_window_search_test(test_images)
+    del test_images
 
 
-    #test_process_movie_image()
+    test_process_movie_image()
     #process_movie()
 
 
