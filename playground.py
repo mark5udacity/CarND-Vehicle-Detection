@@ -179,11 +179,51 @@ print('Printed above size of test sets, also imported cars and notcars and very 
 ALL_HOG_CHANNELS = 'ALL'
 
 SHOULD_TRAIN_CLASSIFIER=True # False will load saved model instead of training
-SHOULD_RECOMPUTE_FEATURES=True # False will load saved model instead of extracting features from training set
+SHOULD_RECOMPUTE_FEATURES=False # False will load saved model instead of extracting features from training set
 
 X_SCALER_FILE = 'X_scaler_pickle.p'
 SVC_PICKLE_FILE = 'svc_pickle.p'
 FEATURE_PICKLE_FILE = 'features_pickle.p'
+
+## THIS HAS ALL THE PARAMS TUNED
+def common_params(
+        func_to_apply,
+        deboog_name,
+        color_space = 'YCrCb',  # Also can be RGB, HSV, LUV, HLS, YUV, YCrCb
+        spatial_size = (32, 32), # results in 3,072 with 16x16, 12,288 with 64x64 and 192 for 8x8;, or x * y * 3
+        # (32, 32) is porbs best for sptial...
+        #  ^^ with minimal training, seems accuracy drops...
+        hist_bins = 32, # 16&32 results in 96, 64 in length 192
+        orient = 9,
+        pix_per_cell = 8, # 4 results in 24,300 length feature
+        cell_per_block = 2,
+        hog_channel = ALL_HOG_CHANNELS,
+        spatial_feat=True,
+        hist_feat=True,
+        hog_feat=True,  # results in 5,292 with 8x2x9 (cell/block,pix/cell,orient)
+        ):
+
+    print('Using:', orient, 'orientations',
+          pix_per_cell, 'pixels per cell and',
+          cell_per_block, 'cells per block')
+
+    def call_with_input(input):
+        print('{}...'.format(deboog_name))
+        return func_to_apply(
+            *input,
+            color_space=color_space,
+            spatial_size=spatial_size,
+            hist_bins=hist_bins,
+            orient=orient,
+            pix_per_cell=pix_per_cell,
+            cell_per_block=cell_per_block,
+            hog_channel=hog_channel,
+            spatial_feat=spatial_feat,
+            hist_feat=hist_feat,
+            hog_feat=hog_feat
+            )
+
+    return call_with_input
 
 def convert_color(img, conv='RGB2YCrCb'):
     if conv == 'RGB2YCrCb':
@@ -333,6 +373,51 @@ def color_hist(img, nbins=32):
     return hist_features
     # return channel_1_hist, channel_2_hist, channel_3_hist, bin_centers, hist_features
 
+
+# Define a function to extract features from a list of images
+# Have this function call bin_spatial() and color_hist()
+def extract_features(
+        imgs,
+        color_space,
+        spatial_size=(32, 32), # next try 32
+        hist_bins=32,
+        orient=9,
+        pix_per_cell=8,
+        cell_per_block=2,
+        hog_channel=ALL_HOG_CHANNELS,
+        spatial_feat=True,
+        hist_feat=True,
+        hog_feat=True
+        ):
+    features = []
+    idx = 1
+    t1 = time.time()
+    for file in imgs:
+        if idx % 1000 == 0:
+            print(round(time.time() - t1, 2), 'Seconds to extract all the features from 1000 things...')
+            t1 = time.time()
+        image = mpimg.imread(file)
+        img_features = mcv_init_single_img_features(
+            image,
+            color_space,
+            hist_bins,
+            hist_feat,
+            hog_channel,
+            hog_feat,
+            cell_per_block,
+            orient,
+            pix_per_cell,
+            spatial_feat,
+            spatial_size
+            )
+
+        idx += 1
+
+        if len(img_features) != 0: features.append(img_features)
+
+    return features
+
+
 def hog_params(feature_image, orient, pix_per_cell, cell_per_block, feature_vec):
     def to_call(channel, viz):
         return get_hog_features(
@@ -416,6 +501,58 @@ print('Loaded Feature Extract Helper Functions!')
 
 
 #### Next cell ####
+
+# Sliding window and such!
+
+# Define a function that takes an image,
+# start and stop positions in both x and y,
+# window size (x and y dimensions),
+# and overlap fraction (for both x and y)
+def slide_window(
+        img,
+        x_start_stop=[None, None],
+        y_start_stop=[None, None],
+        xy_window=(64, 64),
+        xy_overlap=(0.5, 0.5)
+        ):
+    # If x and/or y start/stop positions not defined, set to image size
+    if x_start_stop[0] == None:
+        x_start_stop[0] = 0
+    if x_start_stop[1] == None:
+        x_start_stop[1] = img.shape[1]
+    if y_start_stop[0] == None:
+        y_start_stop[0] = 0
+    if y_start_stop[1] == None:
+        y_start_stop[1] = img.shape[0]
+    # Compute the span of the region to be searched
+    xspan = x_start_stop[1] - x_start_stop[0]
+    yspan = y_start_stop[1] - y_start_stop[0]
+    # Compute the number of pixels per step in x/y
+    nx_pix_per_step = np.int(xy_window[0] * (1 - xy_overlap[0]))
+    ny_pix_per_step = np.int(xy_window[1] * (1 - xy_overlap[1]))
+    # Compute the number of windows in x/y
+    nx_buffer = np.int(xy_window[0] * (xy_overlap[0]))
+    ny_buffer = np.int(xy_window[1] * (xy_overlap[1]))
+    nx_windows = np.int((xspan - nx_buffer) / nx_pix_per_step)
+    ny_windows = np.int((yspan - ny_buffer) / ny_pix_per_step)
+    # Initialize a list to append window positions to
+    window_list = []
+    # Loop through finding x and y window positions
+    # Note: you could vectorize this step, but in practice
+    # you'll be considering windows one by one with your
+    # classifier, so looping makes sense
+    for ys in range(ny_windows):
+        for xs in range(nx_windows):
+            # Calculate window position
+            startx = xs * nx_pix_per_step + x_start_stop[0]
+            endx = startx + xy_window[0]
+            starty = ys * ny_pix_per_step + y_start_stop[0]
+            endy = starty + xy_window[1]
+            # Append window position to list
+            window_list.append(((startx, starty), (endx, endy)))
+    # Return the list of windows
+    return window_list
+
 
 # Define a single function that can extract features using hog sub-sampling and make predictions
 def find_cars(
@@ -512,6 +649,54 @@ def find_cars(
 
     return on_positive_windows, heatmap
 
+# Define a function you will pass an image
+# and the list of windows to be searched (output of slide_windows())
+def search_windows(
+        img,
+        windows,
+        clf,
+        scaler,
+        color_space,
+        spatial_size,
+        hist_bins,
+        orient,
+        pix_per_cell,
+        cell_per_block,
+        hog_channel,
+        spatial_feat,
+        hist_feat,
+        hog_feat
+        ):
+
+    on_positive_windows = []
+    for window in windows:
+        test_img = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]], (64, 64))
+        # 4) Extract features for that window using mcv_init_single_img_features()
+        features = mcv_init_single_img_features(
+            image=test_img,
+            color_space=color_space,
+            spatial_size=spatial_size,
+            hist_bins=hist_bins,
+            orient=orient,
+            pix_per_cell=pix_per_cell,
+            cell_per_block=cell_per_block,
+            hog_channel=hog_channel,
+            spatial_feat=spatial_feat,
+            hist_feat=hist_feat,
+            hog_feat=hog_feat
+            )
+        # 5) Scale extracted features to be fed to classifier
+        test_features = scaler.transform(np.array(features).reshape(1, -1))
+        # 6) Predict using your classifier
+        prediction = clf.predict(test_features)
+        # 7) If positive (prediction == 1) then save the window
+        if prediction == 1:
+            on_positive_windows.append(window)
+    return on_positive_windows
+
+
+print('Loaded up sliding window functions.  Watch out for that banana peel!')
+
 ##### Next Cell ####
 # The training and the pipeline, bringing it all together in the big kahuna!
 
@@ -523,7 +708,7 @@ def train_classifier(
     if SHOULD_RECOMPUTE_FEATURES:
         # Read in cars and notcars
         t1 = time.time()
-        cars, notcars = from_data_set(num_samples=100)
+        cars, notcars = from_data_set(num_samples=15000)
         # from_test_images(test_images)
 
         car_features = extract([cars])
@@ -545,6 +730,12 @@ def train_classifier(
              car_features = pickle.load(file)
         with open('notcar_features.p', "rb") as file:
             notcar_features = pickle.load(file)
+
+    # else:
+    #     extract = common_params(extract_features, 'Extracting features')
+    #     features = extract([test_images])
+    #     with open(FEATURE_PICKLE_FILE, "wb") as file:
+    #         pickle.dump(features, file)
 
     X = np.vstack((car_features, notcar_features)).astype(np.float64)
     # Fit a per-column scaler
@@ -582,6 +773,65 @@ def train_classifier(
 
     return X_scaler, svc
 
+count = 1
+def process_image(
+        X_scaler,
+        image,
+        draw_image,
+        svc,
+        y_start_stop,
+        cell_per_block,
+        color_space,
+        hist_bins,
+        hist_feat,
+        hog_channel,
+        hog_feat,
+        orient,
+        pix_per_cell,
+        spatial_feat,
+        spatial_size,
+        scale = 1
+        ):
+
+    global count
+
+    t1 = time.time()
+
+    hot_windows, heatmap = find_cars(
+        image,
+        y_start_stop[0],
+        y_start_stop[1],
+        scale,
+        svc,
+        X_scaler,
+        color_space=color_space,
+        spatial_size=spatial_size,
+        hist_bins=hist_bins,
+        orient=orient,
+        pix_per_cell=pix_per_cell,
+        cell_per_block=cell_per_block,
+        #hog_channel=hog_channel,
+        #spatial_feat=spatial_feat,
+        #hist_feat=hist_feat,
+        #hog_feat=hog_feat
+        )
+
+    #heat = np.zeros_like(image[:, :, 0]).astype(np.float)
+    #heat = add_heat(heat, hot_windows)
+    labels = label(heatmap)
+
+
+    #window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
+    window_img = draw_labeled_bboxes(np.copy(image), labels)
+
+    plt.imshow(window_img)
+    show_or_save('heat_{}.png'.format(count))
+    count += 1
+
+    t2 = time.time()
+    print(round(t2 - t1, 2), 'Seconds to process single image...')
+    return window_img
+
 print('Done loading the big Kahunas, process and train!')
 
 
@@ -589,6 +839,9 @@ print('Done loading the big Kahunas, process and train!')
 ## Movie time1
 
 X_scaler, svc = load_classifier()
+#vehicles_list = []
+#vehicles_list.append(Vehicle())
+
 vehicle_history = deque(maxlen=7)
 
 
@@ -643,9 +896,8 @@ def process_movie_image(img, debug=False):
     return draw_img
 
 def process_movie():
-    fileName ='test_video.mp4'
-    #'project_video.mp4'
-    #
+    fileName = 'project_video.mp4'
+    # 'test_video.mp4'
     # 'IMG_7462.mp4'
     # 'solidWhiteRight.mp4'
     # 'solidYellowLeft.mp4'
@@ -664,6 +916,144 @@ print('Done loading the movie processing!')
 
 
 #### Next cell ####
+# Testing stuff out
+
+def run_feature_test(test_images, output_file_name='test_feature_{}.png', use_saved_features=False):
+    print('Testing out feature extraction by picking randomly from {} images'.format(len(test_images)))
+
+    extract = common_params(extract_features, 'Extracting features')
+    features = extract([test_images])
+
+    # if use_saved_features:
+    #     with open(FEATURE_PICKLE_FILE, "rb") as file:
+    #         features = pickle.load(file)
+    # else:
+    #     extract = common_params(extract_features, 'Extracting features')
+    #     features = extract([test_images])
+    #     with open(FEATURE_PICKLE_FILE, "wb") as file:
+    #         pickle.dump(features, file)
+
+
+    if len(features) == 0:
+        print('Your function only returns empty feature vectors...')
+        return
+
+    print('Feature vector length:', len(features[0]))
+
+    # Create an array stack of feature vectors
+    X = np.vstack(features).astype(np.float64)
+    # Fit a per-column scaler
+    X_scaler = StandardScaler().fit(X)
+    # Apply the scaler to X
+    scaled_X = X_scaler.transform(X)
+
+    for features_idx, tst_file in enumerate(test_images):
+        #features_ind = np.random.randint(0, len(features))
+        # Plot an example of raw and scaled features
+        fig = plt.figure(figsize=(12, 4))
+        plt.subplot(131)
+        plt.imshow(mpimg.imread(tst_file)) #test_images[features_ind]))
+
+        name = tst_file.split('/')[-1]
+        plt.title('Original Image: {}'.format(name))
+        plt.subplot(132)
+        plt.plot(X[features_idx])
+        plt.title('Raw Features')
+        plt.subplot(133)
+        plt.plot(scaled_X[features_idx])
+        plt.title('Normalized Features: ')
+        fig.tight_layout()
+
+        show_or_save(output_file_name.format(name.split('.')[0]))
+
+def run_sliding_windows_test(test_images, output_file_name='sliding_window_test.png'):
+    print('Testing out sliding windows')
+    jpg_img_idx = np.random.randint(1, 7)
+    image = mpimg.imread('./test_images/test{}.jpg'.format(jpg_img_idx))
+
+    windows = slide_window(
+        image,
+        x_start_stop=[None, None],
+        y_start_stop=[None, None],
+        xy_window=(128, 128),
+        xy_overlap=(0.5, 0.5)
+        )
+
+    window_img = draw_boxes(image, windows, color=(155, 55, 255), thick=6)
+    plt.imshow(window_img)
+    show_or_save(output_file_name)
+
+def run_window_search_test(test_images, output_file_name='search_slide_test_{}.png'):
+    print('Running window search test with classification')
+
+    extract = common_params(extract_features, 'Extracting features')
+
+    if SHOULD_TRAIN_CLASSIFIER:
+        X_scaler, svc = train_classifier(extract)
+    else:
+        X_scaler, svc = load_classifier()
+
+    #jpg_img_idx = np.random.randint(1, 7)
+    for jpg_img_idx in range(6):
+        image = mpimg.imread('./test_images/test{}.jpg'.format(jpg_img_idx + 1)) # mpimg.imread('bbox-example-image.jpg')
+        draw_image = np.copy(image)
+
+        # Uncomment the following line if you extracted training
+        # data from .png images (scaled 0 to 1 by mpimg) and the
+        # image you are searching is a .jpg (scaled 0 to 255)
+        image = image.astype(np.float32)/255
+
+        process = common_params(process_image, 'Processing image')
+        y_start_stop = [400, 670]  # Min and max in y to search in slide_window()
+        window_img = process([X_scaler, image, draw_image, svc, y_start_stop])
+
+        plt.imshow(window_img)
+        show_or_save(output_file_name.format(jpg_img_idx + 1))
+
+def visualize_feature_extract(output_file_name, viz=False):
+    print('Visualizing hog features')
+    car_ind = np.random.randint(0, len(cars))
+    notcar_ind = np.random.randint(0, len(notcars))
+
+    car_image = mpimg.imread(cars[car_ind])
+    notcar_image = mpimg.imread(notcars[notcar_ind])
+
+    extract_img_feature = common_params(mcv_init_single_img_features)
+
+    car_features, car_hog_image = extract_img_feature(image=car_image, viz=viz) ##blech...
+    notcar_features, notcar_hog_image = extract_img_feature(image=notcar_image, viz=viz)
+
+    images = [car_image, car_hog_image, notcar_image, notcar_hog_image]
+    titles = ['Car Image', 'Car HOG', 'Not Car', 'Not Car HOG']
+    fig = plt.figure(figsize=(12,3)) #, dpi=80
+    for i, img, in enumerate(images):
+        ax = plt.subplot(1, 4, i + 1) # rows, cols, subplotidx
+        img_dims = len(img.shape)
+        if img_dims < 3:
+            ax.imshow(img, cmap='hot')
+        else:
+            ax.imshow(img)
+        ax.set_aspect('auto')
+        plt.title(titles[i])
+
+    plt.tight_layout()
+    show_or_save(output_file_name)
+
+
+class Vehicle():
+    def __init__(self):
+        self.detected = False
+        self.n_detections = 0
+        self.n_nondetections = 0
+        self.xpixels = None
+        self.ypixels = None
+        self.recent_xfitted = []
+        self.bestx = None
+        self.recent_yfitted = []
+        self.besty = None
+        self.recent_hfitted = []
+        self.besth = None
+
 
 def test_process_movie_image(output_file_name='labeled_bbox_{}.png'):
     # Read in a pickle file with bboxes saved
@@ -698,8 +1088,14 @@ if platform != 'darwin':  # Mac OSX
     print('Only meant for running from command line!  Or maybe not?')
     # TODO: Verify from Jupyter if needed, think it will work...
 else:
-    test_process_movie_image()
-    process_movie()
+    test_images = glob.glob('./test_images/*.png')
+
+    run_feature_test(test_images) #, 'feature_test.png')
+    run_sliding_windows_test(test_images)
+    #visualize_hog()
+    #visualize_hog(output_file_name='visualize_hog2.png')
+    run_window_search_test(test_images)
+    del test_images
 
 
 print("All done testing!  How's it lookin'!?")
