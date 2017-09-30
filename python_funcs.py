@@ -44,7 +44,7 @@ def process_base_image_dir(basedir):
         raise BaseException(basedir, 'folder not found! Please see ./data/README.md for downloading links and expected structure of data')
 
 
-    # Different folders are different sources for images, GTI, KITTI, etc
+    # Different folderrs are different sources for images, GTI, KITTI, etc
     img_types = os.listdir(basedir)
     if platform == 'darwin':  # Mac OSX
         print('OSX environemnt, trying to remove DS_store')
@@ -85,7 +85,8 @@ def load_crowd_ai():
     IMG_IDX = 4
     LABEL_IDX = 5
 
-    count = 1
+    idx = 1
+    already_exist_count = 0
     with open('{}/labels.csv'.format(basedir)) as csvfile:
         before_cars_len = len(cars)
         before_notcars_len = len(notcars)
@@ -96,6 +97,17 @@ def load_crowd_ai():
         cur_frame = None
         cur_frame_img = None
         for line in reader:
+            if line[LABEL_IDX] == 'Car':
+                outfile_name = '{}/{}/img_{}.png'.format(basedir, 'cars', idx)
+                cars.append(outfile_name)
+            else:
+                outfile_name = '{}/{}/img_{}.png'.format(basedir, 'notcars', idx)
+                notcars.append(outfile_name)
+
+            if os.path.isfile(outfile_name):
+                already_exist_count += 1
+                continue
+
             if line[IMG_IDX] != cur_frame:
                 cur_frame = line[IMG_IDX]
                 input_file = '{}/{}'.format(basedir, cur_frame)
@@ -109,32 +121,21 @@ def load_crowd_ai():
             #print((xmin, xmax), (ymin, ymax))
             cropped = cur_frame_img[ymin:ymax, xmin:xmax]
             #print('Cropped size (pre-resizing): {}'.format(cropped.shape))
-            #if not all(cropped.shape):
-            #    continue
+            if not all(cropped.shape):
+                print('WARN', 'Cropped image doesn\'t have correct bounds, not resizing', cur_frame, idx)
+                continue
             cropped = cv2.resize(cropped, (64, 64))
 
-            if line[LABEL_IDX] == 'Car':
-                outfile_name = '{}/{}/img_{}.png'.format(basedir, 'cars', count)
-                cars.append(outfile_name)
-            else:
-                outfile_name = '{}/{}/img_{}.png'.format(basedir, 'notcars', count)
-                notcars.append(outfile_name)
+            cv2.imwrite(outfile_name, cropped)
+            idx += 1
 
-            if not os.path.isfile(outfile_name):
-                cv2.imwrite(outfile_name, cropped)
-
-            #plt.imshow(cropped)
-            #plt.axis('off')
-            #plt.savefig(outfile_name)
-
-            count += 1
-
-            if count > 5000:
-                print('Added 5,000 images, is that enough?!')
-                break
+            #if count > 5000:
+            #    print('Added 5,000 images, is that enough?!')
+            #    break
 
         print('Added {} cars from Udacity CrowdAI annotated set'.format(len(cars) - before_cars_len))
         print('Added {} notcars'.format(len(notcars) - before_notcars_len))
+        print('Found that {} already existed, please check cars look like cars and notcars look like not cars (possibly trucks)'.format(already_exist_count))
 
 load_crowd_ai()
 
@@ -1054,7 +1055,7 @@ else:
     test_images = glob.glob('./test_images/*.png')
 
     # run_feature_test(test_images) #, 'feature_test.png')
-    # run_sliding_windows_test(test_images)
+    run_sliding_windows_test(test_images)
     #visualize_hog()
     #visualize_hog(output_file_name='visualize_hog2.png')
     run_window_search_test(test_images)
