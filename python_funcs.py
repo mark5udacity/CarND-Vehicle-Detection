@@ -23,6 +23,9 @@ import os
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import BaggingClassifier
+from sklearn.neighbors import KNeighborsClassifier
 
 from scipy.ndimage.measurements import label
 
@@ -99,7 +102,8 @@ print('Printed above size of test sets, also imported cars and notcars and very 
 
 ALL_HOG_CHANNELS = 'ALL'
 
-SHOULD_TRAIN_CLASSIFIER=False # False will load saved model instead of training
+SHOULD_TRAIN_CLASSIFIER=True # False will load saved model instead of training
+SHOULD_RECOMPUTE_FEATURES=False # False will load saved model instead of extracting features from training set
 
 X_SCALER_FILE = 'X_scaler_pickle.p'
 SVC_PICKLE_FILE = 'svc_pickle.p'
@@ -482,6 +486,10 @@ def find_cars(
         color_space
         ):
 
+    img_boxes = []
+    #draw_img = np.copy(img)
+    count = 0
+    heatmap = np.zeros_like(img[:,:,0])
     img = img.astype(np.float32) / 255
 
     img_tosearch = img[ystart:ystop, :, :]
@@ -538,7 +546,6 @@ def find_cars(
             # test_features = X_scaler.transform(np.hstack((shape_feat, hist_feat)).reshape(1, -1))
             test_prediction = svc.predict(test_features)
 
-            #draw_img = np.copy(img)
             if test_prediction == 1:
                 xbox_left = np.int(xleft * scale)
                 ytop_draw = np.int(ytop * scale)
@@ -553,8 +560,10 @@ def find_cars(
                 # Append window position to list
 
                 on_positive_windows.append(((startx, starty), (endx, endy)))
+                img_boxes.append(((xbox_left, ytop_draw+ystart), (xbox_left+win_draw,ytop_draw+win_draw+ystart)))
+                heatmap[ytop_draw+ystart:ytop_draw+win_draw+ystart, xbox_left:xbox_left+win_draw] += 1
 
-    return on_positive_windows
+    return on_positive_windows, heatmap
 
 # Define a function you will pass an image
 # and the list of windows to be searched (output of slide_windows())
@@ -609,16 +618,38 @@ print('Loaded up sliding window functions.  Watch out for that banana peel!')
 
 def train_classifier(
         extract,
-        C=5.0 # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
+        C=5.0, # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
         ):
 
-    print('Training Classifier with C: {}'.format(C))
-    # Read in cars and notcars
-    cars, notcars = from_data_set() #num_samples=1500)
-    # from_test_images(test_images)
+    if SHOULD_RECOMPUTE_FEATURES:
+        # Read in cars and notcars
+        t1 = time.time()
+        cars, notcars = from_data_set() #num_samples=1500)
+        # from_test_images(test_images)
 
-    car_features = extract([cars])
-    notcar_features = extract([notcars])
+        car_features = extract([cars])
+        notcar_features = extract([notcars])
+        print('Saving loaded features')
+        with open('car_features.pickle', 'wb') as file:
+            pickle.dump(car_features, file)
+        with open('notcar_features.pickle', 'wb') as file:
+            pickle.dump(notcar_features, file)
+
+        t2 = time.time()
+        print(round(t2 - t1, 2), 'Seconds to extract all the features from all the things...')
+    else :
+        print('Loading features from pickles')
+        with open('car_features.pickle', "rb") as file:
+             car_features = pickle.load(file)
+        with open('notcar_features.pickle', "rb") as file:
+            notcar_features = pickle.load(file)
+
+    # else:
+    #     extract = common_params(extract_features, 'Extracting features')
+    #     features = extract([test_images])
+    #     with open(FEATURE_PICKLE_FILE, "wb") as file:
+    #         pickle.dump(features, file)
+
     X = np.vstack((car_features, notcar_features)).astype(np.float64)
     # Fit a per-column scaler
     X_scaler = StandardScaler().fit(X)
@@ -631,13 +662,18 @@ def train_classifier(
     X_train, X_test, y_train, y_test = train_test_split(
         scaled_X, y, test_size=0.2, random_state=rand_state)
     print('Feature vector length:', len(X_train[0]))
+
+    print('Training Classifier with C: {}...'.format(C))
+
     # Use a linear SVC
     svc = LinearSVC(C=C)
+    #svc = RandomForestClassifier(n_estimators=100)
+
     # Check the training time for the SVC
     t = time.time()
     svc.fit(X_train, y_train)
     t2 = time.time()
-    print(round(t2 - t, 2), 'Seconds to train SVC...')
+    print(round(t2 - t, 2), '...Seconds to train SVC...')
     # Check the score of the SVC
     print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
 
@@ -649,6 +685,7 @@ def train_classifier(
 
     return X_scaler, svc
 
+count = 1
 def process_image(
         X_scaler,
         image,
@@ -667,17 +704,12 @@ def process_image(
         spatial_size,
         scale = 1
         ):
+
+    global count
+
     t1 = time.time()
 
-    windows = slide_window(
-        image,
-        x_start_stop=[None, None],
-        y_start_stop=y_start_stop,
-        xy_window=(96, 96),
-        xy_overlap=(0.5, 0.5)
-        )
-
-    hot_windows = find_cars(
+    hot_windows, heatmap = find_cars(
         image,
         y_start_stop[0],
         y_start_stop[1],
@@ -696,7 +728,18 @@ def process_image(
         #hog_feat=hog_feat
         )
 
-    window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
+    #heat = np.zeros_like(image[:, :, 0]).astype(np.float)
+    #heat = add_heat(heat, hot_windows)
+    labels = label(heatmap)
+
+
+    #window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
+    window_img = draw_labeled_bboxes(np.copy(image), labels)
+
+    plt.imshow(window_img)
+    show_or_save('heat_{}.png'.format(count))
+    count += 1
+
     t2 = time.time()
     print(round(t2 - t1, 2), 'Seconds to process single image...')
     return window_img
@@ -831,38 +874,77 @@ def visualize_feature_extract(output_file_name, viz=False):
 #def visualize_hog(output_file_name='visualize_hog.png'):
 #    visualize_feature_extract(output_file_name=output_file_name, viz=True)
 
-def test_labeled_bbox():
+def test_labeled_bbox(output_file_name='labeled_bbox_{}.png'):
     # Read in a pickle file with bboxes saved
     # Each item in the "all_bboxes" list will contain a
     # list of boxes for one of the images shown above
-    box_list = pickle.load( open( "bbox_pickle.p", "rb" ))
+    #box_list = pickle.load( open( "bbox_pickle.p", "rb" ))
+
+    X_scaler, svc = load_classifier()
 
     # Read in image similar to one shown above
-    image = mpimg.imread('test_image.jpg')
-    heat = np.zeros_like(image[:, :, 0]).astype(np.float)
+    for jpg_img_idx in range(6):
+        image = mpimg.imread('./test_images/test{}.jpg'.format(jpg_img_idx + 1))
 
-    # Add heat to each box in box list
-    heat = add_heat(heat, box_list)
+        #heat = np.zeros_like(image[:, :, 0]).astype(np.float)
 
-    # Apply threshold to help remove false positives
-    heat = apply_threshold(heat, 1)
+        # Add heat to each box in box list
+        #heat = add_heat(heat, box_list)
 
-    # Visualize the heatmap when displaying
-    heatmap = np.clip(heat, 0, 255)
+        scale = 1.0
+        color_space = 'YCrCb'  # Also can be RGB, HSV, LUV, HLS, YUV, YCrCb
+        spatial_size = (14, 14) # results in 3,072 with 16x16, 12,288 with 64x64 and 192 for 8x8;, or x * y * 3
+        #  ^^ with minimal training, seems accuracy drops...
+        hist_bins = 32 # 16&32 results in 96, 64 in length 192
+        orient = 9
+        pix_per_cell = 8 # 4 results in 24,300 length feature
+        cell_per_block = 2
+        hog_channel = ALL_HOG_CHANNELS
+        spatial_feat=True
+        hist_feat=True
+        hog_feat=True  # results in 5,292 with 8x2x9 (cell/block,pix/cell,orient)
+        y_start_stop = [400, 670]  # Min and max in y to search in slide_window()
 
-    # Find final boxes from heatmap using label function
-    labels = label(heatmap)
-    draw_img = draw_labeled_bboxes(np.copy(image), labels)
+        hot_windows, heat = find_cars(
+            image,
+            y_start_stop[0],
+            y_start_stop[1],
+            scale,
+            svc,
+            X_scaler,
+            color_space=color_space,
+            spatial_size=spatial_size,
+            hist_bins=hist_bins,
+            orient=orient,
+            pix_per_cell=pix_per_cell,
+            cell_per_block=cell_per_block,
+            # hog_channel=hog_channel,
+            # spatial_feat=spatial_feat,
+            # hist_feat=hist_feat,
+            # hog_feat=hog_feat
+            )
 
-    fig = plt.figure()
-    plt.subplot(121)
-    plt.imshow(draw_img)
-    plt.title('Car Positions')
-    plt.subplot(122)
-    plt.imshow(heatmap, cmap='hot')
-    plt.title('Heat Map')
-    fig.tight_layout()
+        # Apply threshold to help remove false positives
+        heat = apply_threshold(heat, 1)
 
+
+        # Visualize the heatmap when displaying
+        #heatmap = np.clip(heat, 0, 255)
+
+        # Find final boxes from heatmap using label function
+        labels = label(heat)
+        draw_img = draw_labeled_bboxes(np.copy(image), labels)
+
+        fig = plt.figure()
+        plt.subplot(121)
+        plt.imshow(draw_img)
+        plt.title('Car Positions')
+        plt.subplot(122)
+        plt.imshow(heat, cmap='hot')
+        plt.title('Heat Map')
+        fig.tight_layout()
+
+        show_or_save(output_file_name.format(jpg_img_idx + 1))
 
 if platform != 'darwin':  # Mac OSX
     print('Only meant for running from command line!  Or maybe not?')
@@ -870,11 +952,13 @@ if platform != 'darwin':  # Mac OSX
 else:
     test_images = glob.glob('./test_images/*.png')
 
-    run_feature_test(test_images) #, 'feature_test.png')
-    run_sliding_windows_test(test_images)
+    # run_feature_test(test_images) #, 'feature_test.png')
+    # run_sliding_windows_test(test_images)
     #visualize_hog()
     #visualize_hog(output_file_name='visualize_hog2.png')
-    run_window_search_test(test_images)
+    #run_window_search_test(test_images)
+
+    test_labeled_bbox()
 
     del test_images
 
