@@ -178,7 +178,6 @@ print('Printed above size of test sets, also imported cars and notcars and very 
 
 ALL_HOG_CHANNELS = 'ALL'
 
-SHOULD_TRAIN_CLASSIFIER=True # False will load saved model instead of training
 SHOULD_RECOMPUTE_FEATURES=True # False will load saved model instead of extracting features from training set
 
 X_SCALER_FILE = 'X_scaler_pickle.p'
@@ -512,81 +511,9 @@ def find_cars(
 
     return on_positive_windows, heatmap
 
-##### Next Cell ####
-# The training and the pipeline, bringing it all together in the big kahuna!
-
-def train_classifier(
-        extract,
-        C=1.0, # Yes...very large C-- but we are doing hard negative mining, works quite effectively >:-D
-        ):
-
-    if SHOULD_RECOMPUTE_FEATURES:
-        # Read in cars and notcars
-        t1 = time.time()
-        cars, notcars = from_data_set(num_samples=100)
-        # from_test_images(test_images)
-
-        car_features = extract([cars])
-        notcar_features = extract([notcars])
-        print('Saving loaded features')
-        try:
-            with open('car_features.p', 'wb') as file:
-                pickle.dump(car_features, file)
-            with open('notcar_features.p', 'wb') as file:
-                pickle.dump(notcar_features, file)
-        except:
-            print('Error trying to save feature pickles.... probs too big, moving along')
-
-        t2 = time.time()
-        print(round(t2 - t1, 2), 'Seconds to extract all the features from all the things...')
-    else :
-        print('Loading features from pickles')
-        with open('car_features.p', "rb") as file:
-             car_features = pickle.load(file)
-        with open('notcar_features.p', "rb") as file:
-            notcar_features = pickle.load(file)
-
-    X = np.vstack((car_features, notcar_features)).astype(np.float64)
-    # Fit a per-column scaler
-    X_scaler = StandardScaler().fit(X)
-    # Apply the scaler to X
-    scaled_X = X_scaler.transform(X)
-    # Define the labels vector
-    y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
-    # Split up data into randomized training and test sets
-    rand_state = np.random.randint(0, 100)
-    X_train, X_test, y_train, y_test = train_test_split(
-        scaled_X, y, test_size=0.2, random_state=rand_state)
-    print('Feature vector length:', len(X_train[0]))
-
-    print('Training Classifier with C: {}...'.format(C))
-
-    # Use a linear SVC
-    svc = LinearSVC(C=C)
-    ##svc = XGBClassifier() ### TODO: WANT TO TRY...but need to install...no time
-    #svc = RandomForestClassifier(n_estimators=100)
-
-    # Check the training time for the SVC
-    t = time.time()
-    svc.fit(X_train, y_train)
-    t2 = time.time()
-    print(round(t2 - t, 2), '...Seconds to train SVC...')
-    # Check the score of the SVC
-    print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
-
-    print('Saving SVC and X_Scaler')
-    with open(SVC_PICKLE_FILE, "wb") as file:
-        pickle.dump(svc, file)
-    with open(X_SCALER_FILE, "wb") as file:
-        pickle.dump(X_scaler, file)
-
-    return X_scaler, svc
-
-print('Done loading the big Kahunas, process and train!')
-
 
 #### Next cell #####
-## Movie time1
+## Movie time!
 
 X_scaler, svc = load_classifier()
 vehicle_history = deque(maxlen=7)

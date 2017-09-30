@@ -43,7 +43,7 @@ I recently discovered the super-happy-puppy-baby-monkey awesome PyCharm is indee
 ####1. Explain how (and identify where in your code) you extracted HOG features from the training images.
 Since my code is really in flux still, I'll try to avid using line-numbers.  I renamed the single_img_features method frm the lecture videos as that was the initial place I had HOG feature extraction (and spatial binning) working.  However, upon following the lecture notes, I proceeded to use the extract HOG-once trick, even though I noticed a small degredation on the smaller subset of images I tested against.
   
-  I renamed the original hog feature to be mcv_init_single_img_features, searching for that will bring you to what you seek. 
+  I renamed the original hog feature to be `mcv_init_single_img_features`, searching for that will bring you to what you seek. 
   A method called process_movie_image contains the approach used in the video, 
 
 The code for this step is contained in the first code cell of the IPython notebook (or in lines # through # of the file called `some_file.py`).  
@@ -60,12 +60,17 @@ Here is an example using the `YCrCb` color space and HOG parameters of `orientat
 ![alt text][image2]
 
 ####2. Explain how you settled on your final choice of HOG parameters.
-
-I tried various combinations of parameters and...
+I initially tried using the visualize_hog feature I had written (whose remants can still be found).  An unfortunate side effect of that was that I unfortunately hacked the `mcv_init_single_img_features` method to take a parameter for visualization (as found in the lecture notes) that would return the raw HOG image for visualization.  The problem with it is it omplicated the functor I had created to try to centralize the parameters into one location. 
 
 ####3. Describe how (and identify where in your code) you trained a classifier using your selected HOG features (and color features if you used them).
 
-I trained a linear SVM using...
+I trained a linear SVM as found in the course.  It was a conflicting choice for me as to which classifier to use as I have a personal connection to both decision trees and SVMs.  My grad school advisor's first student was Corinna Cortes, who co-rotoe one of the first papaers of SVMs with Vladimir Vapnick and is now head of Google Research NYC.  The connection I had to decision trees is that while I worked at Amazon, I met someone wrote a random-forest-as-a-service (that should now be included in the machine-learning AWS services) who informed me how great they were, despite their simpleness compared to SVMs.  
+
+
+In the end, I was surprised to discover after several iterations that Random Forests didn't classify well at all. I also didn't find much discussion in the forum about alternatives to SVMs, so I stuck with them.
+
+I discovered a very high-C to fit to the training data work since a lot of the data was hard negative mining from the video itself.  When I added the CrowdAi set, I reduced it to avoid overfitting to the more generalized data set.
+
 
 ###Sliding Window Search
 

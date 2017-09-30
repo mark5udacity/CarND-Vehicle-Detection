@@ -179,7 +179,7 @@ print('Printed above size of test sets, also imported cars and notcars and very 
 ALL_HOG_CHANNELS = 'ALL'
 
 SHOULD_TRAIN_CLASSIFIER=True # False will load saved model instead of training
-SHOULD_RECOMPUTE_FEATURES=False # False will load saved model instead of extracting features from training set
+SHOULD_RECOMPUTE_FEATURES=True # False will load saved model instead of extracting features from training set
 
 X_SCALER_FILE = 'X_scaler_pickle.p'
 SVC_PICKLE_FILE = 'svc_pickle.p'
@@ -708,7 +708,7 @@ def train_classifier(
     if SHOULD_RECOMPUTE_FEATURES:
         # Read in cars and notcars
         t1 = time.time()
-        cars, notcars = from_data_set(num_samples=15000)
+        cars, notcars = from_data_set(num_samples=25000)
         # from_test_images(test_images)
 
         car_features = extract([cars])
