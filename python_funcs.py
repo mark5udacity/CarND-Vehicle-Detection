@@ -121,11 +121,17 @@ def load_crowd_ai():
                 notcars.append(outfile_name)
 
             if not os.path.isfile(outfile_name):
-                plt.imshow(cropped)
-                plt.axis('off')
-                plt.savefig(outfile_name, bbox_inches='tight')
+                cv2.imwrite(outfile_name, cropped)
+
+            #plt.imshow(cropped)
+            #plt.axis('off')
+            #plt.savefig(outfile_name)
 
             count += 1
+
+            if count > 5000:
+                print('Added 5,000 images, is that enough?!')
+                break
 
         print('Added {} cars from Udacity CrowdAI annotated set'.format(len(cars) - before_cars_len))
         print('Added {} notcars'.format(len(notcars) - before_notcars_len))
