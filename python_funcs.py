@@ -1,4 +1,5 @@
 import csv
+from collections import deque
 
 import cv2
 import glob
@@ -86,6 +87,7 @@ def load_crowd_ai():
     LABEL_IDX = 5
 
     idx = 1
+    car_idx = idx
     already_exist_count = 0
     with open('{}/labels.csv'.format(basedir)) as csvfile:
         before_cars_len = len(cars)
@@ -99,6 +101,9 @@ def load_crowd_ai():
         for line in reader:
             if line[LABEL_IDX] == 'Car':
                 outfile_name = '{}/{}/img_{}.png'.format(basedir, 'cars', idx)
+                if car_idx > 10000:
+                    count += 1
+                    continue
                 cars.append(outfile_name)
             else:
                 outfile_name = '{}/{}/img_{}.png'.format(basedir, 'notcars', idx)
@@ -384,7 +389,12 @@ def extract_features(
         hog_feat=True
         ):
     features = []
+    idx = 1
+    t1 = time.time()
     for file in imgs:
+        if idx % 1000 == 0:
+            print(round(time.time() - t1, 2), 'Seconds to extract all the features from 250 things...')
+            t1 = time.time()
         image = mpimg.imread(file)
         img_features = single_img_features(
             image,
@@ -399,6 +409,8 @@ def extract_features(
             spatial_feat,
             spatial_size
             )
+
+        idx += 1
 
         if len(img_features) != 0: features.append(img_features)
 
@@ -695,24 +707,27 @@ def train_classifier(
     if SHOULD_RECOMPUTE_FEATURES:
         # Read in cars and notcars
         t1 = time.time()
-        cars, notcars = from_data_set() #num_samples=1500)
+        cars, notcars = from_data_set(num_samples=15000)
         # from_test_images(test_images)
 
         car_features = extract([cars])
         notcar_features = extract([notcars])
         print('Saving loaded features')
-        with open('car_features.pickle', 'wb') as file:
-            pickle.dump(car_features, file)
-        with open('notcar_features.pickle', 'wb') as file:
-            pickle.dump(notcar_features, file)
+        try:
+            with open('car_features.p', 'wb') as file:
+                pickle.dump(car_features, file)
+            with open('notcar_features.p', 'wb') as file:
+                pickle.dump(notcar_features, file)
+        except:
+            print('Error trying to save feature pickles.... probs too big, moving along')
 
         t2 = time.time()
         print(round(t2 - t1, 2), 'Seconds to extract all the features from all the things...')
     else :
         print('Loading features from pickles')
-        with open('car_features.pickle', "rb") as file:
+        with open('car_features.p', "rb") as file:
              car_features = pickle.load(file)
-        with open('notcar_features.pickle', "rb") as file:
+        with open('notcar_features.p', "rb") as file:
             notcar_features = pickle.load(file)
 
     # else:
@@ -823,6 +838,10 @@ print('Done loading the big Kahunas, process and train!')
 ## Movie time1
 
 X_scaler, svc = load_classifier()
+#vehicles_list = []
+#vehicles_list.append(Vehicle())
+
+vehicle_history = deque(maxlen=7)
 
 
 def process_movie_image(img, debug=False):
@@ -861,10 +880,11 @@ def process_movie_image(img, debug=False):
         )
 
     # Apply threshold to alp remove false positives
-    heat = apply_threshold(heat, 0.72)
-
+    heat = apply_threshold(heat, 0.78)
+    # Visualize the heatmap when displaying
+    heatmap = np.clip(heat, 0, 255)
     # Find final boxes from heatmap using label function
-    labels = label(heat)
+    labels = label(vehicle_history)
     draw_img = draw_labeled_bboxes(np.copy(img), labels)
 
     if debug:
@@ -1015,9 +1035,21 @@ def visualize_feature_extract(output_file_name, viz=False):
     plt.tight_layout()
     show_or_save(output_file_name)
 
-# Thanks to Q&A
-#def visualize_hog(output_file_name='visualize_hog.png'):
-#    visualize_feature_extract(output_file_name=output_file_name, viz=True)
+
+class Vehicle():
+    def __init__(self):
+        self.detected = False
+        self.n_detections = 0
+        self.n_nondetections = 0
+        self.xpixels = None
+        self.ypixels = None
+        self.recent_xfitted = []
+        self.bestx = None
+        self.recent_yfitted = []
+        self.besty = None
+        self.recent_hfitted = []
+        self.besth = None
+
 
 def test_process_movie_image(output_file_name='labeled_bbox_{}.png'):
     # Read in a pickle file with bboxes saved
@@ -1055,7 +1087,7 @@ else:
     test_images = glob.glob('./test_images/*.png')
 
     # run_feature_test(test_images) #, 'feature_test.png')
-    run_sliding_windows_test(test_images)
+    #run_sliding_windows_test(test_images)
     #visualize_hog()
     #visualize_hog(output_file_name='visualize_hog2.png')
     run_window_search_test(test_images)
